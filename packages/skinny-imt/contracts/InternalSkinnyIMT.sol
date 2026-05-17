@@ -19,8 +19,6 @@ struct SkinnyIMTData {
 
 error WrongSiblingNodes();
 error LeafGreaterThanSnarkScalarField();
-error LeafCannotBeZero();
-error LeafAlreadyExists();
 error LeafDoesNotExist();
 
 /// @title Skinny Incremental binary Merkle tree.
@@ -40,10 +38,6 @@ library InternalSkinnyIMT {
     function _insert(SkinnyIMTData storage self, uint256 leaf) internal returns (uint256) {
         if (leaf >= SNARK_SCALAR_FIELD) {
             revert LeafGreaterThanSnarkScalarField();
-        } else if (leaf == 0) {
-            revert LeafCannotBeZero();
-        } else if (_has(self, leaf)) {
-            revert LeafAlreadyExists();
         }
 
         uint256 index = self.size;
@@ -96,10 +90,6 @@ library InternalSkinnyIMT {
         for (uint256 i = 0; i < leaves.length; ) {
             if (leaves[i] >= SNARK_SCALAR_FIELD) {
                 revert LeafGreaterThanSnarkScalarField();
-            } else if (leaves[i] == 0) {
-                revert LeafCannotBeZero();
-            } else if (_has(self, leaves[i])) {
-                revert LeafAlreadyExists();
             }
 
             self.leaves[leaves[i]] = treeSize + 1 + i;
@@ -236,8 +226,6 @@ library InternalSkinnyIMT {
             revert LeafGreaterThanSnarkScalarField();
         } else if (!_has(self, oldLeaf)) {
             revert LeafDoesNotExist();
-        } else if (_has(self, newLeaf)) {
-            revert LeafAlreadyExists();
         }
 
         uint256 index = _indexOf(self, oldLeaf);

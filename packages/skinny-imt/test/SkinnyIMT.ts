@@ -43,16 +43,6 @@ describe("SkinnyIMT", () => {
             expect(root).to.equal(jsLeanIMT.root)
         })
 
-        it("Should insert a leaf with value 0", async () => {
-            jsLeanIMT.insert(BigInt(0))
-
-            await skinnyIMTTest.insert(0)
-
-            const root = await skinnyIMTTest.root()
-
-            expect(root).to.equal(jsLeanIMT.root)
-        })
-
         // it("Should not insert a leaf if it was already inserted before", async () => {
         //     await skinnyIMTTest.insert(1)
 
@@ -141,24 +131,6 @@ describe("SkinnyIMT", () => {
                 expect(root).to.equal(jsLeanIMT.root)
             }
         })
-        it("Should insert 0 as the only leaf", async () => {
-            jsLeanIMT.insert(BigInt(0))
-
-            await skinnyIMTTest.insertMany([0])
-
-            const root = await skinnyIMTTest.root()
-            expect(root).to.equal(jsLeanIMT.root)
-        })
-
-        it("Should insert 0 as the right child", async () => {
-            jsLeanIMT.insertMany([BigInt(1), BigInt(0)])
-
-            await skinnyIMTTest.insertMany([1, 0])
-
-            const root = await skinnyIMTTest.root()
-            expect(root).to.equal(jsLeanIMT.root)
-        })
-
         it("Should insert many leaves when the tree is not empty", async () => {
             jsLeanIMT.insert(BigInt(1))
 
@@ -315,57 +287,6 @@ describe("SkinnyIMT", () => {
             }
         })
 
-        // TODO double check that is safe to remove this?
-        // i assume "removed" is just setting as zero. And was not allowed to update that leaf since 0 leafs are not allowed
-        // but skinnyIMT is allowed to have 0 leaves so
-        // it("Should not update a leaf that was removed", async () => {
-        //     await skinnyIMTTest.insertMany([1, 2])
-        //     jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
-
-        //     jsLeanIMT.update(1, BigInt(0))
-
-        //     const { siblings } = jsLeanIMT.generateProof(1)
-
-        //     await skinnyIMTTest.remove(2, siblings)
-
-        //     jsLeanIMT.update(1, BigInt(3))
-
-        //     const { siblings: newSiblings } = jsLeanIMT.generateProof(1)
-
-        //     const transaction = skinnyIMTTest.update(0, 3, newSiblings)
-
-        //     await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafDoesNotExist")
-        // })
-
-        it("Should track leaf 0 in has() after updating a leaf to 0", async () => {
-            await skinnyIMTTest.insert(1)
-            jsLeanIMT.insert(BigInt(1))
-
-            jsLeanIMT.update(0, BigInt(0))
-            const { siblings } = jsLeanIMT.generateProof(0)
-
-            await skinnyIMTTest.update(1, 0, siblings)
-
-            expect(await skinnyIMTTest.has(0)).to.equal(true)
-        })
-
-        it("Should allow updating leaf 0 after a leaf was updated to 0", async () => {
-            await skinnyIMTTest.insert(1)
-            await skinnyIMTTest.insert(2)
-            jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
-
-            jsLeanIMT.update(0, BigInt(0))
-            const { siblings } = jsLeanIMT.generateProof(0)
-            await skinnyIMTTest.update(1, 0, siblings)
-
-            jsLeanIMT.update(0, BigInt(3))
-            const { siblings: newSiblings } = jsLeanIMT.generateProof(0)
-            await skinnyIMTTest.update(0, 3, newSiblings)
-
-            const root = await skinnyIMTTest.root()
-            expect(root).to.equal(jsLeanIMT.root)
-        })
-
         it("Should maintain correct tree state after multiple updates and inserts", async () => {
             for (let i = 0; i < 5; i += 1) {
                 jsLeanIMT.insert(BigInt(i + 1))
@@ -483,6 +404,165 @@ describe("SkinnyIMT", () => {
             const transaction = skinnyIMTTest.indexOf(3)
 
             await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafDoesNotExist")
+        })
+    })
+
+    // These tests exist because naively removing the LeafCannotBeZero checks
+    // introduced bugs in _insertMany (rightNode != 0 sentinel collision) and
+    // _update (if (newLeaf != 0) guard skipping leaves[0] write).
+    describe("zero inserts and updates test", () => {
+        it("Should insert a leaf with value 0", async () => {
+            jsLeanIMT.insert(BigInt(0))
+
+            await skinnyIMTTest.insert(0)
+
+            const root = await skinnyIMTTest.root()
+            expect(root).to.equal(jsLeanIMT.root)
+        })
+
+        it("Should insertMany with 0 as the only leaf", async () => {
+            jsLeanIMT.insert(BigInt(0))
+
+            await skinnyIMTTest.insertMany([0])
+
+            const root = await skinnyIMTTest.root()
+            expect(root).to.equal(jsLeanIMT.root)
+        })
+
+        it("Should insertMany with 0 as the right child", async () => {
+            // When forked from LeanIMT, naively removing the LeafCannotBeZero would break this
+            // _insertMany used `if (rightNode != 0)` to detect a missing right child, which collided
+            // with a real zero-valued leaf and treated it as dangling instead of hashing it.
+            jsLeanIMT.insert(BigInt(1))
+            jsLeanIMT.insert(BigInt(0))
+
+            await skinnyIMTTest.insertMany([1, 0])
+
+            const root = await skinnyIMTTest.root()
+            expect(root).to.equal(jsLeanIMT.root)
+        })
+
+        it("Should track leaf 0 in has() after updating a leaf to 0", async () => {
+            // When forked from LeanIMT, naively removing the LeafCannotBeZero would break this
+            // _update had a `if (newLeaf != 0)` guard that skipped writing leaves[0],
+            // so has(0) always returned false even after a leaf was updated to zero.
+            await skinnyIMTTest.insert(1)
+            jsLeanIMT.insert(BigInt(1))
+
+            jsLeanIMT.update(0, BigInt(0))
+            const { siblings } = jsLeanIMT.generateProof(0)
+
+            await skinnyIMTTest.update(1, 0, siblings)
+
+            expect(await skinnyIMTTest.has(0)).to.equal(true)
+        })
+
+        it("Should allow updating leaf 0 after a leaf was updated to 0", async () => {
+            // When forked from LeanIMT, naively removing the LeafCannotBeZero would break this
+            // update uses _has(0) which would return false. Even though 0 was inserted.
+            // this caused LeafDoesNotExist error, even though it is there!
+            await skinnyIMTTest.insert(1)
+            await skinnyIMTTest.insert(2)
+            jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
+
+            jsLeanIMT.update(0, BigInt(0))
+            const { siblings } = jsLeanIMT.generateProof(0)
+            await skinnyIMTTest.update(1, 0, siblings)
+
+            jsLeanIMT.update(0, BigInt(3))
+            const { siblings: newSiblings } = jsLeanIMT.generateProof(0)
+            await skinnyIMTTest.update(0, 3, newSiblings)
+
+            const root = await skinnyIMTTest.root()
+            expect(root).to.equal(jsLeanIMT.root)
+        })
+    })
+
+    // These tests exist because naively removing the LeafAlreadyExists checks
+    // caused bugs — duplicate entries should be allowed and produce roots matching leanIMT.js.
+    describe("duplicate entries test", () => {
+        it("Should insert a duplicate leaf via insert", async () => {
+            jsLeanIMT.insert(BigInt(1))
+            jsLeanIMT.insert(BigInt(1))
+
+            await skinnyIMTTest.insert(1)
+            await skinnyIMTTest.insert(1)
+
+            const root = await skinnyIMTTest.root()
+            expect(root).to.equal(jsLeanIMT.root)
+        })
+
+        it("Should insert duplicate leaves via insertMany", async () => {
+            jsLeanIMT.insert(BigInt(1))
+            jsLeanIMT.insert(BigInt(1))
+
+            await skinnyIMTTest.insertMany([1, 1])
+
+            const root = await skinnyIMTTest.root()
+            expect(root).to.equal(jsLeanIMT.root)
+        })
+
+        it("Should insert many duplicates across multiple insertMany calls", async () => {
+            jsLeanIMT.insert(BigInt(1))
+            jsLeanIMT.insert(BigInt(1))
+            jsLeanIMT.insert(BigInt(2))
+            jsLeanIMT.insert(BigInt(2))
+
+            await skinnyIMTTest.insertMany([1, 1])
+            await skinnyIMTTest.insertMany([2, 2])
+
+            const root = await skinnyIMTTest.root()
+            expect(root).to.equal(jsLeanIMT.root)
+        })
+
+        it("Should update to an already existing leaf value", async () => {
+            jsLeanIMT.insert(BigInt(1))
+            jsLeanIMT.insert(BigInt(2))
+            jsLeanIMT.update(0, BigInt(2))
+
+            await skinnyIMTTest.insert(1)
+            await skinnyIMTTest.insert(2)
+
+            const { siblings } = jsLeanIMT.generateProof(0)
+            await skinnyIMTTest.update(1, 2, siblings)
+
+            const root = await skinnyIMTTest.root()
+            expect(root).to.equal(jsLeanIMT.root)
+        })
+
+        it("Should insert a duplicate then update it", async () => {
+            jsLeanIMT.insert(BigInt(1))
+            jsLeanIMT.insert(BigInt(1))
+            jsLeanIMT.update(1, BigInt(5))
+
+            await skinnyIMTTest.insert(1)
+            await skinnyIMTTest.insert(1)
+
+            const { siblings } = jsLeanIMT.generateProof(1)
+            await skinnyIMTTest.update(1, 5, siblings)
+
+            const root = await skinnyIMTTest.root()
+            expect(root).to.equal(jsLeanIMT.root)
+        })
+
+        it("Should still find the first occurrence after updating the last duplicate", async () => {
+            // When forked from LeanIMT, naively removing the LeafAlreadyExists check caused this to break,
+            // leaves were tracked as leave -> index in SkinnyIMTData.leaves.
+            // a duplicate insert would overwrite the index of the previous insert of that value
+            // this causes update to use the wrong index
+            await skinnyIMTTest.insert(1)
+            await skinnyIMTTest.insert(1) // duplicate at index 1, leaves[1] overwritten to point here
+            jsLeanIMT.insert(BigInt(1))
+            jsLeanIMT.insert(BigInt(1))
+
+            // update(1, 5) targets last occurrence (index 1) since leaves[1] points there
+            jsLeanIMT.update(1, BigInt(5))
+            const { siblings } = jsLeanIMT.generateProof(1)
+            await skinnyIMTTest.update(1, 5, siblings)
+
+            // leaves[1] is now cleared — the first occurrence at index 0 (still value 1)
+            // is permanently orphaned, has(1) returns false even though 1 exists at index 0
+            expect(await skinnyIMTTest.has(1)).to.equal(true)
         })
     })
 
