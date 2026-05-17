@@ -220,7 +220,7 @@ You'll need to [install slither](https://github.com/crytic/slither?tab=readme-ov
 ZK-Kit uses [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/). A [command line utility](https://github.com/commitizen/cz-cli) to commit using the correct syntax can be used by running:
 
 ```bash
-yarn commit
+yarn czg
 ```
 
 It will also automatically check that the modified files comply with ESLint and Prettier rules.
