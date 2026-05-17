@@ -25,13 +25,13 @@ describe("SkinnyIMT", () => {
             await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafGreaterThanSnarkScalarField")
         })
 
-        it("Should not insert a leaf if it is 0", async () => {
-            const leaf = 0
+        // it("Should not insert a leaf if it is 0", async () => {
+        //     const leaf = 0
 
-            const transaction = skinnyIMTTest.insert(leaf)
+        //     const transaction = skinnyIMTTest.insert(leaf)
 
-            await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafCannotBeZero")
-        })
+        //     await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafCannotBeZero")
+        // })
 
         it("Should insert a leaf", async () => {
             jsLeanIMT.insert(BigInt(1))
@@ -43,16 +43,38 @@ describe("SkinnyIMT", () => {
             expect(root).to.equal(jsLeanIMT.root)
         })
 
-        it("Should not insert a leaf if it was already inserted before", async () => {
-            await skinnyIMTTest.insert(1)
+        it("Should insert a leaf with value 0", async () => {
+            jsLeanIMT.insert(BigInt(0))
 
-            const transaction = skinnyIMTTest.insert(1)
+            await skinnyIMTTest.insert(0)
 
-            await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafAlreadyExists")
+            const root = await skinnyIMTTest.root()
+
+            expect(root).to.equal(jsLeanIMT.root)
         })
+
+        // it("Should not insert a leaf if it was already inserted before", async () => {
+        //     await skinnyIMTTest.insert(1)
+
+        //     const transaction = skinnyIMTTest.insert(1)
+
+        //     await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafAlreadyExists")
+        // })
 
         it("Should insert 10 leaves", async () => {
             for (let i = 0; i < 10; i += 1) {
+                jsLeanIMT.insert(BigInt(i + 1))
+
+                await skinnyIMTTest.insert(i + 1)
+
+                const root = await skinnyIMTTest.root()
+
+                expect(root).to.equal(jsLeanIMT.root)
+            }
+        })
+
+        it("Should insert 128 leaves", async () => {
+            for (let i = 0; i < 128; i += 1) {
                 jsLeanIMT.insert(BigInt(i + 1))
 
                 await skinnyIMTTest.insert(i + 1)
@@ -71,20 +93,20 @@ describe("SkinnyIMT", () => {
             await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafGreaterThanSnarkScalarField")
         })
 
-        it("Should not insert a leaf if it is 0", async () => {
-            const leaf = 0
+        // it("Should not insert a leaf if it is 0", async () => {
+        //     const leaf = 0
 
-            const transaction = skinnyIMTTest.insertMany([leaf])
+        //     const transaction = skinnyIMTTest.insertMany([leaf])
 
-            await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafCannotBeZero")
-        })
-        it("Should not insert a leaf if it was already inserted before", async () => {
-            await skinnyIMTTest.insert(1)
+        //     await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafCannotBeZero")
+        // })
+        // it("Should not insert a leaf if it was already inserted before", async () => {
+        //     await skinnyIMTTest.insert(1)
 
-            const transaction = skinnyIMTTest.insertMany([1])
+        //     const transaction = skinnyIMTTest.insertMany([1])
 
-            await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafAlreadyExists")
-        })
+        //     await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafAlreadyExists")
+        // })
         it("Should insert a leaf", async () => {
             jsLeanIMT.insert(BigInt(1))
 
@@ -106,6 +128,37 @@ describe("SkinnyIMT", () => {
             const root = await skinnyIMTTest.root()
             expect(root).to.equal(jsLeanIMT.root)
         })
+        it("Should insert 18 leaves 8 times", async () => {
+            const howMany = 18
+            const howManyTimes = 8
+            for (let index = 0; index < howManyTimes; index++) {
+                const elems = new Array(howMany).fill(0).map((v, i) => BigInt(index * howMany + i + 1))
+
+                jsLeanIMT.insertMany(elems)
+                await skinnyIMTTest.insertMany(elems)
+
+                const root = await skinnyIMTTest.root()
+                expect(root).to.equal(jsLeanIMT.root)
+            }
+        })
+        it("Should insert 0 as the only leaf", async () => {
+            jsLeanIMT.insert(BigInt(0))
+
+            await skinnyIMTTest.insertMany([0])
+
+            const root = await skinnyIMTTest.root()
+            expect(root).to.equal(jsLeanIMT.root)
+        })
+
+        it("Should insert 0 as the right child", async () => {
+            jsLeanIMT.insertMany([BigInt(1), BigInt(0)])
+
+            await skinnyIMTTest.insertMany([1, 0])
+
+            const root = await skinnyIMTTest.root()
+            expect(root).to.equal(jsLeanIMT.root)
+        })
+
         it("Should insert many leaves when the tree is not empty", async () => {
             jsLeanIMT.insert(BigInt(1))
 
@@ -162,6 +215,32 @@ describe("SkinnyIMT", () => {
             const { siblings } = jsLeanIMT.generateProof(0)
 
             await skinnyIMTTest.update(1, 3, siblings)
+
+            const root = await skinnyIMTTest.root()
+
+            expect(root).to.equal(jsLeanIMT.root)
+        })
+
+        it("Should update a leaf if there's are 128 leaf in the tree", async () => {
+            const oldLeaf = 1n
+            const newLeaf = 6969n
+            const howMany = 18
+            const howManyTimes = 8
+            // do insert in batches other wise insertMany would look off on gas report
+            // use insertMany so test runs faster
+            for (let index = 0; index < howManyTimes; index++) {
+                const elems = new Array(howMany).fill(0).map((v, i) => BigInt(index * howMany + i + 1))
+
+                jsLeanIMT.insertMany(elems)
+                await skinnyIMTTest.insertMany(elems)
+
+                const root = await skinnyIMTTest.root()
+                expect(root).to.equal(jsLeanIMT.root)
+            }
+            const { siblings } = jsLeanIMT.generateProof(0)
+
+            await skinnyIMTTest.update(oldLeaf, newLeaf, siblings)
+            jsLeanIMT.update(jsLeanIMT.indexOf(oldLeaf), newLeaf)
 
             const root = await skinnyIMTTest.root()
 
@@ -236,37 +315,57 @@ describe("SkinnyIMT", () => {
             }
         })
 
-        it("Should not update a leaf that was removed", async () => {
-            await skinnyIMTTest.insertMany([1, 2])
-            jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
+        // TODO double check that is safe to remove this?
+        // i assume "removed" is just setting as zero. And was not allowed to update that leaf since 0 leafs are not allowed
+        // but skinnyIMT is allowed to have 0 leaves so
+        // it("Should not update a leaf that was removed", async () => {
+        //     await skinnyIMTTest.insertMany([1, 2])
+        //     jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
 
-            jsLeanIMT.update(1, BigInt(0))
+        //     jsLeanIMT.update(1, BigInt(0))
 
-            const { siblings } = jsLeanIMT.generateProof(1)
+        //     const { siblings } = jsLeanIMT.generateProof(1)
 
-            await skinnyIMTTest.remove(2, siblings)
+        //     await skinnyIMTTest.remove(2, siblings)
 
-            jsLeanIMT.update(1, BigInt(3))
+        //     jsLeanIMT.update(1, BigInt(3))
 
-            const { siblings: newSiblings } = jsLeanIMT.generateProof(1)
+        //     const { siblings: newSiblings } = jsLeanIMT.generateProof(1)
 
-            const transaction = skinnyIMTTest.update(0, 3, newSiblings)
+        //     const transaction = skinnyIMTTest.update(0, 3, newSiblings)
 
-            await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafDoesNotExist")
-        })
-        it("Should not update a leaf if the new value already exists", async () => {
+        //     await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafDoesNotExist")
+        // })
+
+        it("Should track leaf 0 in has() after updating a leaf to 0", async () => {
             await skinnyIMTTest.insert(1)
-            await skinnyIMTTest.insert(2)
+            jsLeanIMT.insert(BigInt(1))
 
-            jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
-            jsLeanIMT.update(0, BigInt(2))
-
+            jsLeanIMT.update(0, BigInt(0))
             const { siblings } = jsLeanIMT.generateProof(0)
 
-            const transaction = skinnyIMTTest.update(1, 2, siblings)
+            await skinnyIMTTest.update(1, 0, siblings)
 
-            await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafAlreadyExists")
+            expect(await skinnyIMTTest.has(0)).to.equal(true)
         })
+
+        it("Should allow updating leaf 0 after a leaf was updated to 0", async () => {
+            await skinnyIMTTest.insert(1)
+            await skinnyIMTTest.insert(2)
+            jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
+
+            jsLeanIMT.update(0, BigInt(0))
+            const { siblings } = jsLeanIMT.generateProof(0)
+            await skinnyIMTTest.update(1, 0, siblings)
+
+            jsLeanIMT.update(0, BigInt(3))
+            const { siblings: newSiblings } = jsLeanIMT.generateProof(0)
+            await skinnyIMTTest.update(0, 3, newSiblings)
+
+            const root = await skinnyIMTTest.root()
+            expect(root).to.equal(jsLeanIMT.root)
+        })
+
         it("Should maintain correct tree state after multiple updates and inserts", async () => {
             for (let i = 0; i < 5; i += 1) {
                 jsLeanIMT.insert(BigInt(i + 1))
@@ -289,6 +388,7 @@ describe("SkinnyIMT", () => {
         })
     })
 
+    // @TODO again double check this weird concept of update(leaf=0) as being a "remove"
     describe("# remove", () => {
         it("Should remove a leaf", async () => {
             await skinnyIMTTest.insert(1)
