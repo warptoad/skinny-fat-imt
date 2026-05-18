@@ -25,14 +25,6 @@ describe("SkinnyIMT", () => {
             await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafGreaterThanSnarkScalarField")
         })
 
-        // it("Should not insert a leaf if it is 0", async () => {
-        //     const leaf = 0
-
-        //     const transaction = skinnyIMTTest.insert(leaf)
-
-        //     await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafCannotBeZero")
-        // })
-
         it("Should insert a leaf", async () => {
             jsLeanIMT.insert(BigInt(1))
 
@@ -42,14 +34,6 @@ describe("SkinnyIMT", () => {
 
             expect(root).to.equal(jsLeanIMT.root)
         })
-
-        // it("Should not insert a leaf if it was already inserted before", async () => {
-        //     await skinnyIMTTest.insert(1)
-
-        //     const transaction = skinnyIMTTest.insert(1)
-
-        //     await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafAlreadyExists")
-        // })
 
         it("Should insert 10 leaves", async () => {
             for (let i = 0; i < 10; i += 1) {
@@ -83,20 +67,6 @@ describe("SkinnyIMT", () => {
             await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafGreaterThanSnarkScalarField")
         })
 
-        // it("Should not insert a leaf if it is 0", async () => {
-        //     const leaf = 0
-
-        //     const transaction = skinnyIMTTest.insertMany([leaf])
-
-        //     await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafCannotBeZero")
-        // })
-        // it("Should not insert a leaf if it was already inserted before", async () => {
-        //     await skinnyIMTTest.insert(1)
-
-        //     const transaction = skinnyIMTTest.insertMany([1])
-
-        //     await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafAlreadyExists")
-        // })
         it("Should insert a leaf", async () => {
             jsLeanIMT.insert(BigInt(1))
 
@@ -151,26 +121,25 @@ describe("SkinnyIMT", () => {
 
     describe("# update", () => {
         it("Should not update a leaf if the leaf does not exist", async () => {
-            const transaction = skinnyIMTTest.update(2, 1, [1, 2, 3, 4])
+            const transaction = skinnyIMTTest.update(2, 1, 0, [1, 2, 3, 4])
 
             await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafDoesNotExist")
         })
 
         it("Should not update a leaf if its value is >= SNARK_SCALAR_FIELD", async () => {
-            const transaction = skinnyIMTTest.update(2, SNARK_SCALAR_FIELD, [1, 2, 3, 4])
+            const transaction = skinnyIMTTest.update(2, SNARK_SCALAR_FIELD, 0, [1, 2, 3, 4])
 
             await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafGreaterThanSnarkScalarField")
         })
 
         it("Should update a leaf if that's the only leaf in the tree", async () => {
             await skinnyIMTTest.insert(1)
-
             jsLeanIMT.insert(BigInt(1))
-            jsLeanIMT.update(0, BigInt(2))
 
             const { siblings } = jsLeanIMT.generateProof(0)
 
-            await skinnyIMTTest.update(1, 2, siblings)
+            await skinnyIMTTest.update(1, 2, 0, siblings)
+            jsLeanIMT.update(0, BigInt(2))
 
             const root = await skinnyIMTTest.root()
 
@@ -186,7 +155,7 @@ describe("SkinnyIMT", () => {
 
             const { siblings } = jsLeanIMT.generateProof(0)
 
-            await skinnyIMTTest.update(1, 3, siblings)
+            await skinnyIMTTest.update(1, 3, 0, siblings)
 
             const root = await skinnyIMTTest.root()
 
@@ -211,7 +180,7 @@ describe("SkinnyIMT", () => {
             }
             const { siblings } = jsLeanIMT.generateProof(0)
 
-            await skinnyIMTTest.update(oldLeaf, newLeaf, siblings)
+            await skinnyIMTTest.update(oldLeaf, newLeaf, 0, siblings)
             jsLeanIMT.update(jsLeanIMT.indexOf(oldLeaf), newLeaf)
 
             const root = await skinnyIMTTest.root()
@@ -230,7 +199,7 @@ describe("SkinnyIMT", () => {
 
             siblings[0] = SNARK_SCALAR_FIELD
 
-            const transaction = skinnyIMTTest.update(1, 3, siblings)
+            const transaction = skinnyIMTTest.update(1, 3, 0, siblings)
 
             await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafGreaterThanSnarkScalarField")
         })
@@ -246,7 +215,7 @@ describe("SkinnyIMT", () => {
 
             siblings[0] = SNARK_SCALAR_FIELD
 
-            const transaction = skinnyIMTTest.update(2, 3, siblings)
+            const transaction = skinnyIMTTest.update(2, 3, 1, siblings)
 
             await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafGreaterThanSnarkScalarField")
         })
@@ -262,7 +231,7 @@ describe("SkinnyIMT", () => {
 
             siblings[0] = BigInt(3)
 
-            const transaction = skinnyIMTTest.update(1, 3, siblings)
+            const transaction = skinnyIMTTest.update(1, 3, 0, siblings)
 
             await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "WrongSiblingNodes")
         })
@@ -279,7 +248,7 @@ describe("SkinnyIMT", () => {
 
                 const { siblings } = jsLeanIMT.generateProof(i)
 
-                await skinnyIMTTest.update(i + 1, i + 7, siblings)
+                await skinnyIMTTest.update(i + 1, i + 7, i, siblings)
 
                 const root = await skinnyIMTTest.root()
 
@@ -296,7 +265,7 @@ describe("SkinnyIMT", () => {
             for (let i = 0; i < 3; i += 1) {
                 jsLeanIMT.update(i, BigInt(i + 10))
                 const { siblings } = jsLeanIMT.generateProof(i)
-                await skinnyIMTTest.update(i + 1, i + 10, siblings)
+                await skinnyIMTTest.update(i + 1, i + 10, i, siblings)
             }
 
             for (let i = 5; i < 8; i += 1) {
@@ -310,8 +279,8 @@ describe("SkinnyIMT", () => {
     })
 
     // @TODO again double check this weird concept of update(leaf=0) as being a "remove"
-    describe("# remove", () => {
-        it("Should remove a leaf", async () => {
+    describe("# update to 0", () => {
+        it("Should update a leaf to be 0", async () => {
             await skinnyIMTTest.insert(1)
             await skinnyIMTTest.insert(2)
             await skinnyIMTTest.insert(3)
@@ -321,14 +290,14 @@ describe("SkinnyIMT", () => {
 
             const { siblings } = jsLeanIMT.generateProof(2)
 
-            await skinnyIMTTest.remove(3, siblings)
+            await skinnyIMTTest.update(3, 0, 2, siblings)
 
             const root = await skinnyIMTTest.root()
 
             expect(root).to.equal(jsLeanIMT.root)
         })
 
-        it("Should remove 10 leaf", async () => {
+        it("Should update 10 leafs to be 0", async () => {
             for (let i = 0; i < 10; i += 1) {
                 jsLeanIMT.insert(BigInt(i + 1))
 
@@ -340,7 +309,7 @@ describe("SkinnyIMT", () => {
 
                 const { siblings } = jsLeanIMT.generateProof(i)
 
-                await skinnyIMTTest.remove(i + 1, siblings)
+                await skinnyIMTTest.update(i + 1, 0, i, siblings)
 
                 const root = await skinnyIMTTest.root()
 
@@ -353,18 +322,18 @@ describe("SkinnyIMT", () => {
         it("Should return true because the node is in the tree", async () => {
             await skinnyIMTTest.insert(1)
 
-            const hasLeaf = await skinnyIMTTest.has(1)
+            const hasLeaf = await skinnyIMTTest.has(1, 0)
 
             expect(hasLeaf).to.equal(true)
         })
 
         it("Should return false because the node is not the tree", async () => {
-            const hasLeaf = await skinnyIMTTest.has(2)
+            const hasLeaf = await skinnyIMTTest.has(2, 0)
 
             expect(hasLeaf).to.equal(false)
         })
 
-        it("Should return false if the leaf is 0", async () => {
+        it("Should return true if the leaf is 0", async () => {
             await skinnyIMTTest.insertMany([1, 2])
             jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
 
@@ -372,38 +341,11 @@ describe("SkinnyIMT", () => {
 
             const { siblings } = jsLeanIMT.generateProof(1)
 
-            await skinnyIMTTest.remove(2, siblings)
+            await skinnyIMTTest.update(2, 0, 1, siblings)
 
-            const hasLeaf = await skinnyIMTTest.has(0)
+            const hasLeaf = await skinnyIMTTest.has(0, 1)
 
-            expect(hasLeaf).to.equal(false)
-        })
-    })
-    describe("# indexOf", () => {
-        it("Should return the index of a leaf", async () => {
-            await skinnyIMTTest.insert(1)
-
-            const index = await skinnyIMTTest.indexOf(1)
-
-            expect(index).to.equal(0)
-        })
-
-        it("Should return the indices of the leaves", async () => {
-            await skinnyIMTTest.insertMany([1, 2])
-
-            const index1 = await skinnyIMTTest.indexOf(1)
-            const index2 = await skinnyIMTTest.indexOf(2)
-
-            expect(index1).to.equal(0)
-            expect(index2).to.equal(1)
-        })
-
-        it("Should throw a custom error if the leaf does not exist", async () => {
-            await skinnyIMTTest.insertMany([1, 2])
-
-            const transaction = skinnyIMTTest.indexOf(3)
-
-            await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafDoesNotExist")
+            expect(hasLeaf).to.equal(true)
         })
     })
 
@@ -452,9 +394,9 @@ describe("SkinnyIMT", () => {
             jsLeanIMT.update(0, BigInt(0))
             const { siblings } = jsLeanIMT.generateProof(0)
 
-            await skinnyIMTTest.update(1, 0, siblings)
+            await skinnyIMTTest.update(1, 0, 0, siblings)
 
-            expect(await skinnyIMTTest.has(0)).to.equal(true)
+            expect(await skinnyIMTTest.has(0, 0)).to.equal(true)
         })
 
         it("Should allow updating leaf 0 after a leaf was updated to 0", async () => {
@@ -467,11 +409,11 @@ describe("SkinnyIMT", () => {
 
             jsLeanIMT.update(0, BigInt(0))
             const { siblings } = jsLeanIMT.generateProof(0)
-            await skinnyIMTTest.update(1, 0, siblings)
+            await skinnyIMTTest.update(1, 0, 0, siblings)
 
             jsLeanIMT.update(0, BigInt(3))
             const { siblings: newSiblings } = jsLeanIMT.generateProof(0)
-            await skinnyIMTTest.update(0, 3, newSiblings)
+            await skinnyIMTTest.update(0, 3, 0, newSiblings)
 
             const root = await skinnyIMTTest.root()
             expect(root).to.equal(jsLeanIMT.root)
@@ -524,7 +466,7 @@ describe("SkinnyIMT", () => {
             await skinnyIMTTest.insert(2)
 
             const { siblings } = jsLeanIMT.generateProof(0)
-            await skinnyIMTTest.update(1, 2, siblings)
+            await skinnyIMTTest.update(1, 2, 0, siblings)
 
             const root = await skinnyIMTTest.root()
             expect(root).to.equal(jsLeanIMT.root)
@@ -539,7 +481,7 @@ describe("SkinnyIMT", () => {
             await skinnyIMTTest.insert(1)
 
             const { siblings } = jsLeanIMT.generateProof(1)
-            await skinnyIMTTest.update(1, 5, siblings)
+            await skinnyIMTTest.update(1, 5, 1, siblings)
 
             const root = await skinnyIMTTest.root()
             expect(root).to.equal(jsLeanIMT.root)
@@ -558,11 +500,11 @@ describe("SkinnyIMT", () => {
             // update(1, 5) targets last occurrence (index 1) since leaves[1] points there
             jsLeanIMT.update(1, BigInt(5))
             const { siblings } = jsLeanIMT.generateProof(1)
-            await skinnyIMTTest.update(1, 5, siblings)
+            await skinnyIMTTest.update(1, 5, 1, siblings)
 
             // leaves[1] is now cleared — the first occurrence at index 0 (still value 1)
             // is permanently orphaned, has(1) returns false even though 1 exists at index 0
-            expect(await skinnyIMTTest.has(1)).to.equal(true)
+            expect(await skinnyIMTTest.has(1, 0)).to.equal(true)
         })
     })
 

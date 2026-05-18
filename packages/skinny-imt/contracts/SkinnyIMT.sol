@@ -18,28 +18,21 @@ library SkinnyIMT {
         SkinnyIMTData storage self,
         uint256 oldLeaf,
         uint256 newLeaf,
+        uint256 index,
         uint256[] calldata siblingNodes
     ) public returns (uint256) {
-        return InternalSkinnyIMT._update(self, oldLeaf, newLeaf, siblingNodes);
+        return InternalSkinnyIMT._update(self, oldLeaf, newLeaf, index, siblingNodes);
     }
 
-    function remove(
-        SkinnyIMTData storage self,
-        uint256 oldLeaf,
-        uint256[] calldata siblingNodes
-    ) public returns (uint256) {
-        return InternalSkinnyIMT._remove(self, oldLeaf, siblingNodes);
-    }
-
-    function has(SkinnyIMTData storage self, uint256 leaf) public view returns (bool) {
-        return InternalSkinnyIMT._has(self, leaf);
-    }
-
-    function indexOf(SkinnyIMTData storage self, uint256 leaf) public view returns (uint256) {
-        return InternalSkinnyIMT._indexOf(self, leaf);
+    function has(SkinnyIMTData storage self, uint256 leaf, uint256 index) public view returns (bool) {
+        return InternalSkinnyIMT._has(self, leaf, index);
     }
 
     function root(SkinnyIMTData storage self) public view returns (uint256) {
         return InternalSkinnyIMT._root(self);
+    }
+
+    function sideNode(SkinnyIMTData storage self, uint256 index) public view returns (uint256) {
+        return InternalSkinnyIMT._sideNode(self, index);
     }
 }
