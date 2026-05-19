@@ -123,7 +123,7 @@ describe("SkinnyIMT", () => {
         it("Should not update a leaf if the leaf does not exist", async () => {
             const transaction = skinnyIMTTest.update(2, 1, 0, [1, 2, 3, 4])
 
-            await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafDoesNotExist")
+            await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "WrongSiblingNodes")
         })
 
         it("Should not update a leaf if its value is >= SNARK_SCALAR_FIELD", async () => {
@@ -321,14 +321,17 @@ describe("SkinnyIMT", () => {
     describe("# has", () => {
         it("Should return true because the node is in the tree", async () => {
             await skinnyIMTTest.insert(1)
-
-            const hasLeaf = await skinnyIMTTest.has(1, 0)
+            jsLeanIMT.insert(1n)
+            const proof = jsLeanIMT.generateProof(0)
+            const hasLeaf = await skinnyIMTTest.has(1, 0, proof.siblings)
 
             expect(hasLeaf).to.equal(true)
         })
 
         it("Should return false because the node is not the tree", async () => {
-            const hasLeaf = await skinnyIMTTest.has(2, 0)
+            jsLeanIMT.insert(2n)
+            const proof = jsLeanIMT.generateProof(0)
+            const hasLeaf = await skinnyIMTTest.has(2, 0, proof.siblings)
 
             expect(hasLeaf).to.equal(false)
         })
@@ -343,7 +346,8 @@ describe("SkinnyIMT", () => {
 
             await skinnyIMTTest.update(2, 0, 1, siblings)
 
-            const hasLeaf = await skinnyIMTTest.has(0, 1)
+            const proof = jsLeanIMT.generateProof(1)
+            const hasLeaf = await skinnyIMTTest.has(0, 1, proof.siblings)
 
             expect(hasLeaf).to.equal(true)
         })
@@ -395,8 +399,8 @@ describe("SkinnyIMT", () => {
             const { siblings } = jsLeanIMT.generateProof(0)
 
             await skinnyIMTTest.update(1, 0, 0, siblings)
-
-            expect(await skinnyIMTTest.has(0, 0)).to.equal(true)
+            const proof = jsLeanIMT.generateProof(0)
+            expect(await skinnyIMTTest.has(0, 0, proof.siblings)).to.equal(true)
         })
 
         it("Should allow updating leaf 0 after a leaf was updated to 0", async () => {
@@ -504,7 +508,8 @@ describe("SkinnyIMT", () => {
 
             // leaves[1] is now cleared — the first occurrence at index 0 (still value 1)
             // is permanently orphaned, has(1) returns false even though 1 exists at index 0
-            expect(await skinnyIMTTest.has(1, 0)).to.equal(true)
+            const proof = jsLeanIMT.generateProof(0)
+            expect(await skinnyIMTTest.has(1, 0, proof.siblings)).to.equal(true)
         })
     })
 

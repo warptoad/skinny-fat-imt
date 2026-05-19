@@ -4,6 +4,12 @@ pragma solidity ^0.8.4;
 import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
 import {SNARK_SCALAR_FIELD} from "./Constants.sol";
 
+// TODO optimize duplicate inserts by adding hashed from 0 level nodes
+
+event NewLeaf(uint256 indexed treeId, uint256 startIndex, uint256 leaves);
+event UpdatedLeaf(uint256 indexed treeId, uint256 indexed index, uint256 indexed leaf);
+event NewTree(uint256 indexed treeId);
+
 struct SkinnyIMTData {
     // Tracks the current number of leaves in the tree.
     uint256 size;
@@ -14,15 +20,18 @@ struct SkinnyIMTData {
     mapping(uint256 => uint256) sideNodes;
     // A mapping of leaf = leaves[index].
     // This facilitates checks for leaf existence and retrieval of all leaves.
-    mapping(uint256 => uint256) leaves;
+    //mapping(uint256 => uint256) leaves;
 
     //@TODO use since it can be retrieved extremely fast with debug_storageRangeAt
     //uint256[] public leaves;
+    uint256 treeId;
 }
 
 error WrongSiblingNodes();
 error LeafGreaterThanSnarkScalarField();
 error LeafDoesNotExist();
+error NotInitialized();
+error AlreadyInitialized();
 
 /// @title Skinny Incremental binary Merkle tree.
 /// @dev The SkinnyIMT is an optimized version of the BinaryIMT.
@@ -32,6 +41,23 @@ error LeafDoesNotExist();
 /// it is updated based on the number of leaves in the tree. This approach
 /// results in the calculation of significantly fewer hashes, making the tree more efficient.
 library InternalSkinnyIMT {
+    function _isInitialized(SkinnyIMTData storage self) internal view returns (bool) {
+        return self.treeId != 0;
+    }
+    function _init(SkinnyIMTData storage self) internal returns (uint256) {
+        if (_isInitialized(self)) {
+            revert AlreadyInitialized();
+        }
+        uint256 slot;
+        assembly {
+            slot := self.slot
+        }
+        uint256 id = slot + 1;
+        self.treeId = id;
+        emit NewTree(id);
+        return id;
+    }
+
     function _sideNode(SkinnyIMTData storage self, uint256 index) internal view returns (uint256) {
         return self.sideNodes[index];
     }
@@ -70,6 +96,9 @@ library InternalSkinnyIMT {
     /// @param leaf: The value of the new leaf to be inserted into the tree.
     /// @return The new hash of the node after the leaf has been inserted.
     function _insert(SkinnyIMTData storage self, uint256 leaf) internal returns (uint256) {
+        if (_isInitialized(self) == false) {
+            revert NotInitialized();
+        }
         if (leaf >= SNARK_SCALAR_FIELD) {
             revert LeafGreaterThanSnarkScalarField();
         }
@@ -118,11 +147,11 @@ library InternalSkinnyIMT {
 
         // mapping code
         self.sideNodes[treeDepth] = node;
-        self.leaves[index] = leaf;
+        //self.leaves[index] = leaf;
         // original did self.size = index++ above
         // since self.leaves[leaf] = index + 1. But that is no longer true
         self.size = index + 1;
-
+        emit NewLeaf(self.treeId, index, leaf);
         return node;
     }
 
@@ -133,6 +162,9 @@ library InternalSkinnyIMT {
     /// @param leaves: The values of the new leaves to be inserted into the tree.
     /// @return The root after the leaves have been inserted.
     function _insertMany(SkinnyIMTData storage self, uint256[] calldata leaves) internal returns (uint256) {
+        if (_isInitialized(self) == false) {
+            revert NotInitialized();
+        }
         // Cache tree size to optimize gas
         // array
         // uint256 treeSize = _amountLeaves(self);
@@ -140,6 +172,7 @@ library InternalSkinnyIMT {
         uint256 treeSize = self.size;
 
         // Check that all the new values are correct to be added.
+        uint256 treeId = self.treeId;
         for (uint256 i = 0; i < leaves.length; ) {
             if (leaves[i] >= SNARK_SCALAR_FIELD) {
                 revert LeafGreaterThanSnarkScalarField();
@@ -148,7 +181,9 @@ library InternalSkinnyIMT {
             // array
             // self.leaves.push(leaves[i]);
 
-            self.leaves[treeSize + i] = leaves[i];
+            //self.leaves[treeSize + i] = leaves[i];
+
+            emit NewLeaf(treeId, treeSize + i, leaves[i]);
 
             unchecked {
                 ++i;
@@ -299,11 +334,19 @@ library InternalSkinnyIMT {
         uint256 index,
         uint256[] calldata siblingNodes
     ) internal returns (uint256) {
+        if (_isInitialized(self) == false) {
+            revert NotInitialized();
+        }
+        // mapping
+        uint256 treeDepth = self.depth;
         if (newLeaf >= SNARK_SCALAR_FIELD) {
             revert LeafGreaterThanSnarkScalarField();
-        } else if (!_has(self, oldLeaf, index)) {
-            revert LeafDoesNotExist();
+        } else if (siblingNodes.length > treeDepth) {
+            revert WrongSiblingNodes();
         }
+        //  else if (!_has(self, oldLeaf, index, siblingNodes)) {
+        //     revert LeafDoesNotExist();
+        // }
         // @TODO we can remove _has here? It's cheap early check, but the siblingNodes is being used to merkle inclusion proof the oldLeaf any way below
 
         uint256 node = newLeaf;
@@ -319,9 +362,6 @@ library InternalSkinnyIMT {
         // Cache tree depth to optimize gas
         // array
         // uint256 treeDepth = _treeDepth(self);
-
-        // mapping
-        uint256 treeDepth = self.depth;
 
         for (uint256 level = 0; level < treeDepth; ) {
             if ((index >> level) & 1 == 1) {
@@ -367,7 +407,8 @@ library InternalSkinnyIMT {
 
         self.sideNodes[treeDepth] = node;
 
-        self.leaves[index] = newLeaf;
+        //self.leaves[index] = newLeaf;
+        emit UpdatedLeaf(self.treeId, index, newLeaf);
 
         return node;
     }
@@ -376,38 +417,80 @@ library InternalSkinnyIMT {
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @param leaf: The value of the leaf to check for existence.
     /// @return A boolean value indicating whether the leaf exists in the tree.
-    function _has(SkinnyIMTData storage self, uint256 leaf, uint256 index) internal view returns (bool) {
+    function _has(
+        SkinnyIMTData storage self,
+        uint256 leaf,
+        uint256 index,
+        uint256[] calldata siblings
+    ) internal view returns (bool) {
         // array
         // if (index >= self.leaves.length) {
         // mapping
-        if (index >= self.size) {
-            return false;
-        } else {
-            return self.leaves[index] == leaf;
-        }
+        // if (index >= self.size) {
+        //     return false;
+        // } else {
+        //     return self.leaves[index] == leaf;
+        // }
+
+        uint256 rootSiblings = _rootFromSiblings(leaf, index, siblings);
+        return rootSiblings == _root(self);
     }
 
     // @TODO this instead of _has so we can remove the leaves
     function _rootFromSiblings(
-        SkinnyIMTData storage self,
         uint256 leaf,
         uint256 index,
         uint256[] calldata siblingNodes
-    ) internal view returns (uint256) {}
+    ) internal pure returns (uint256) {
+        uint256 oldRoot = leaf;
+
+        // array
+        // uint256 lastIndex = self.leaves.length - 1;
+
+        uint256 i = 0;
+
+        // Cache tree depth to optimize gas
+        // array
+        // uint256 treeDepth = _treeDepth(self);
+
+        // mapping
+        uint256 proofDepth = siblingNodes.length;
+
+        for (uint256 level = 0; level < proofDepth; ) {
+            if ((index >> level) & 1 == 1) {
+                if (siblingNodes[i] >= SNARK_SCALAR_FIELD) {
+                    revert LeafGreaterThanSnarkScalarField();
+                }
+
+                oldRoot = PoseidonT3.hash([siblingNodes[i], oldRoot]);
+
+                unchecked {
+                    ++i;
+                }
+            } else {
+                if (siblingNodes[i] >= SNARK_SCALAR_FIELD) {
+                    revert LeafGreaterThanSnarkScalarField();
+                }
+
+                oldRoot = PoseidonT3.hash([oldRoot, siblingNodes[i]]);
+
+                unchecked {
+                    ++i;
+                }
+            }
+
+            unchecked {
+                ++level;
+            }
+        }
+        return oldRoot;
+    }
 
     /// @dev Retrieves the root of the tree from the 'sideNodes' mapping using the
     /// current tree depth.
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @return The root hash of the tree.
     function _root(SkinnyIMTData storage self) internal view returns (uint256) {
-        // array
-        // @TODO old leanIMT returned 0 on empty tree. Or should we just error?
-        // if (self.leaves.length == 0) {
-        //     return 0;
-        // } else {
-        //     return self.sideNodes[_treeDepth(self)];
-        // }
-
         return self.sideNodes[self.depth];
     }
 }

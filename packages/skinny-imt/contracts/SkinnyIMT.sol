@@ -6,6 +6,10 @@ import {InternalSkinnyIMT, SkinnyIMTData} from "./InternalSkinnyIMT.sol";
 library SkinnyIMT {
     using InternalSkinnyIMT for *;
 
+    function init(SkinnyIMTData storage self) public returns (uint256) {
+        return InternalSkinnyIMT._init(self);
+    }
+
     function insert(SkinnyIMTData storage self, uint256 leaf) public returns (uint256) {
         return InternalSkinnyIMT._insert(self, leaf);
     }
@@ -24,8 +28,13 @@ library SkinnyIMT {
         return InternalSkinnyIMT._update(self, oldLeaf, newLeaf, index, siblingNodes);
     }
 
-    function has(SkinnyIMTData storage self, uint256 leaf, uint256 index) public view returns (bool) {
-        return InternalSkinnyIMT._has(self, leaf, index);
+    function has(
+        SkinnyIMTData storage self,
+        uint256 leaf,
+        uint256 index,
+        uint256[] calldata siblings
+    ) public view returns (bool) {
+        return InternalSkinnyIMT._has(self, leaf, index, siblings);
     }
 
     function root(SkinnyIMTData storage self) public view returns (uint256) {

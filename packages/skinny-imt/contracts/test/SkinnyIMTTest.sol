@@ -7,6 +7,10 @@ import {SkinnyIMT, SkinnyIMTData} from "../SkinnyIMT.sol";
 contract SkinnyIMTTest {
     SkinnyIMTData internal data;
 
+    constructor() {
+        SkinnyIMT.init(data);
+    }
+
     function insert(uint256 leaf) external {
         SkinnyIMT.insert(data, leaf);
     }
@@ -19,8 +23,8 @@ contract SkinnyIMTTest {
         SkinnyIMT.update(data, oldLeaf, newLeaf, index, siblingNodes);
     }
 
-    function has(uint256 leaf, uint256 index) external view returns (bool) {
-        return SkinnyIMT.has(data, leaf, index);
+    function has(uint256 leaf, uint256 index, uint256[] calldata siblings) external view returns (bool) {
+        return SkinnyIMT.has(data, leaf, index, siblings);
     }
 
     function root() public view returns (uint256) {
