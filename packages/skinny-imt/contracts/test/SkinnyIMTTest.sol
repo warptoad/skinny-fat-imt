@@ -30,8 +30,4 @@ contract SkinnyIMTTest {
     function root() public view returns (uint256) {
         return SkinnyIMT.root(data);
     }
-
-    function sideNode(uint256 index) public view returns (uint256) {
-        return SkinnyIMT.sideNode(data, index);
-    }
 }

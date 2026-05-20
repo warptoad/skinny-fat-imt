@@ -3,6 +3,7 @@ pragma solidity ^0.8.4;
 
 import {InternalSkinnyIMT, SkinnyIMTData} from "./InternalSkinnyIMT.sol";
 import {SNARK_SCALAR_FIELD} from "./Constants.sol";
+import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
 
 error LeafGreaterThanSnarkScalarField();
 
@@ -11,6 +12,11 @@ event UpdatedLeaf(uint256 indexed treeId, uint256 indexed index, uint256 indexed
 event NewTree(uint256 indexed treeId);
 
 library SkinnyIMT {
+    // The function used for hashing. Passed as a function parameter in functions from InternalLazyIMT
+    function hasher(uint256[2] memory input) internal pure returns (uint256) {
+        return PoseidonT3.hash(input);
+    }
+
     using InternalSkinnyIMT for *;
 
     /// @dev Initializes the tree by assigning it a non-zero `treeId` derived from its storage slot.
@@ -31,7 +37,7 @@ library SkinnyIMT {
             revert LeafGreaterThanSnarkScalarField();
         }
 
-        return InternalSkinnyIMT._insert(self, leaf);
+        return InternalSkinnyIMT._insert(self, leaf, hasher);
     }
 
     /// @dev Inserts many leaves into the incremental merkle tree.
@@ -54,7 +60,7 @@ library SkinnyIMT {
                 ++i;
             }
         }
-        return InternalSkinnyIMT._insertMany(self, leaves);
+        return InternalSkinnyIMT._insertMany(self, leaves, hasher);
     }
 
     /// @dev Updates the value of an existing leaf and recalculates hashes
@@ -84,7 +90,7 @@ library SkinnyIMT {
                 revert LeafGreaterThanSnarkScalarField();
             }
         }
-        return InternalSkinnyIMT._update(self, oldLeaf, newLeaf, index, siblingNodes);
+        return InternalSkinnyIMT._update(self, oldLeaf, newLeaf, index, siblingNodes, hasher);
     }
 
     /// @dev Checks if a leaf exists in the tree.
@@ -108,7 +114,7 @@ library SkinnyIMT {
                 revert LeafGreaterThanSnarkScalarField();
             }
         }
-        return InternalSkinnyIMT._has(self, leaf, index, siblingNodes);
+        return InternalSkinnyIMT._has(self, leaf, index, siblingNodes, hasher);
     }
 
     /// @dev Retrieves the root of the tree from the 'sideNodes' mapping using the

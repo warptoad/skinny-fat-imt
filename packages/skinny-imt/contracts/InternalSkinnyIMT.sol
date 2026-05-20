@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
-
 // TODO optimize duplicate inserts by adding hashed from 0 level nodes
 struct SkinnyIMTData {
     // Tracks the current number of leaves in the tree.
@@ -60,7 +58,11 @@ library InternalSkinnyIMT {
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @param leaf: The value of the new leaf to be inserted into the tree.
     /// @return The new hash of the node after the leaf has been inserted.
-    function _insert(SkinnyIMTData storage self, uint256 leaf) internal returns (uint256) {
+    function _insert(
+        SkinnyIMTData storage self,
+        uint256 leaf,
+        function(uint256[2] memory) view returns (uint256) hasher
+    ) internal returns (uint256) {
         if (_isInitialized(self) == false) {
             revert NotInitialized();
         }
@@ -83,7 +85,7 @@ library InternalSkinnyIMT {
         for (uint256 level = 0; level < treeDepth; ) {
             if ((index >> level) & 1 == 1) {
                 // hash right
-                node = PoseidonT3.hash([self.sideNodes[level], node]);
+                node = hasher([self.sideNodes[level], node]);
             } else {
                 // leave to dangle:
                 // node is used in next iter, becomes it's own parent.
@@ -109,7 +111,11 @@ library InternalSkinnyIMT {
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @param leaves: The values of the new leaves to be inserted into the tree.
     /// @return The root after the leaves have been inserted.
-    function _insertMany(SkinnyIMTData storage self, uint256[] calldata leaves) internal returns (uint256) {
+    function _insertMany(
+        SkinnyIMTData storage self,
+        uint256[] calldata leaves,
+        function(uint256[2] memory) view returns (uint256) hasher
+    ) internal returns (uint256) {
         if (_isInitialized(self) == false) {
             revert NotInitialized();
         }
@@ -167,7 +173,7 @@ library InternalSkinnyIMT {
                 // If a right child exists: assign it and hash(left, right). Otherwise: parent = left.
                 if ((i + nextLevelStartIndex) * 2 + 1 < currentLevelSize) {
                     hasherInput[1] = currentLevelNewNodes[(i + nextLevelStartIndex) * 2 + 1 - currentLevelStartIndex];
-                    parentNode = PoseidonT3.hash(hasherInput);
+                    parentNode = hasher(hasherInput);
                 } else {
                     // leave to dangle:
                     // node is used in next iter, becomes it's own parent.
@@ -239,7 +245,8 @@ library InternalSkinnyIMT {
         uint256 oldLeaf,
         uint256 newLeaf,
         uint256 index,
-        uint256[] calldata siblingNodes
+        uint256[] calldata siblingNodes,
+        function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
         if (_isInitialized(self) == false) {
             revert NotInitialized();
@@ -262,8 +269,8 @@ library InternalSkinnyIMT {
         // and at the same time calculate the newRoot
         for (uint256 level = 0; level < treeDepth; ) {
             if ((index >> level) & 1 == 1) {
-                node = PoseidonT3.hash([siblingNodes[i], node]);
-                oldRoot = PoseidonT3.hash([siblingNodes[i], oldRoot]);
+                node = hasher([siblingNodes[i], node]);
+                oldRoot = hasher([siblingNodes[i], oldRoot]);
 
                 unchecked {
                     ++i;
@@ -274,8 +281,8 @@ library InternalSkinnyIMT {
                         self.sideNodes[level] = node;
                     }
 
-                    node = PoseidonT3.hash([node, siblingNodes[i]]);
-                    oldRoot = PoseidonT3.hash([oldRoot, siblingNodes[i]]);
+                    node = hasher([node, siblingNodes[i]]);
+                    oldRoot = hasher([oldRoot, siblingNodes[i]]);
 
                     unchecked {
                         ++i;
@@ -313,9 +320,10 @@ library InternalSkinnyIMT {
         SkinnyIMTData storage self,
         uint256 leaf,
         uint256 index,
-        uint256[] calldata siblingNodes
+        uint256[] calldata siblingNodes,
+        function(uint256[2] memory) view returns (uint256) hasher
     ) internal view returns (bool) {
-        uint256 rootSiblings = _rootFromSiblings(leaf, index, siblingNodes);
+        uint256 rootSiblings = _rootFromSiblings(leaf, index, siblingNodes, hasher);
         return rootSiblings == _root(self);
     }
 
@@ -329,8 +337,9 @@ library InternalSkinnyIMT {
     function _rootFromSiblings(
         uint256 leaf,
         uint256 index,
-        uint256[] calldata siblingNodes
-    ) internal pure returns (uint256) {
+        uint256[] calldata siblingNodes,
+        function(uint256[2] memory) view returns (uint256) hasher
+    ) internal view returns (uint256) {
         uint256 oldRoot = leaf;
 
         uint256 i = 0;
@@ -339,13 +348,13 @@ library InternalSkinnyIMT {
 
         for (uint256 level = 0; level < proofDepth; ) {
             if ((index >> level) & 1 == 1) {
-                oldRoot = PoseidonT3.hash([siblingNodes[i], oldRoot]);
+                oldRoot = hasher([siblingNodes[i], oldRoot]);
 
                 unchecked {
                     ++i;
                 }
             } else {
-                oldRoot = PoseidonT3.hash([oldRoot, siblingNodes[i]]);
+                oldRoot = hasher([oldRoot, siblingNodes[i]]);
 
                 unchecked {
                     ++i;
