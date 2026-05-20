@@ -2,14 +2,8 @@
 pragma solidity ^0.8.4;
 
 import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
-import {SNARK_SCALAR_FIELD} from "./Constants.sol";
 
 // TODO optimize duplicate inserts by adding hashed from 0 level nodes
-
-event NewLeaf(uint256 indexed treeId, uint256 startIndex, uint256 leaves);
-event UpdatedLeaf(uint256 indexed treeId, uint256 indexed index, uint256 indexed leaf);
-event NewTree(uint256 indexed treeId);
-
 struct SkinnyIMTData {
     // Tracks the current number of leaves in the tree.
     uint256 size;
@@ -18,17 +12,12 @@ struct SkinnyIMTData {
     // A mapping from each level of the tree to the node value of the last even position at that level.
     // Used for efficient inserts, updates and root calculations.
     mapping(uint256 => uint256) sideNodes;
-    // A mapping of leaf = leaves[index].
-    // This facilitates checks for leaf existence and retrieval of all leaves.
-    //mapping(uint256 => uint256) leaves;
-
     //@TODO use since it can be retrieved extremely fast with debug_storageRangeAt
     //uint256[] public leaves;
     uint256 treeId;
 }
 
 error WrongSiblingNodes();
-error LeafGreaterThanSnarkScalarField();
 error LeafDoesNotExist();
 error NotInitialized();
 error AlreadyInitialized();
@@ -41,9 +30,17 @@ error AlreadyInitialized();
 /// it is updated based on the number of leaves in the tree. This approach
 /// results in the calculation of significantly fewer hashes, making the tree more efficient.
 library InternalSkinnyIMT {
+    /// @dev Checks whether the tree has been initialized.
+    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+    /// @return True if the tree has been initialized, false otherwise.
     function _isInitialized(SkinnyIMTData storage self) internal view returns (bool) {
         return self.treeId != 0;
     }
+
+    /// @dev Initializes the tree by assigning it a non-zero `treeId` derived from its storage slot.
+    /// Reverts if the tree has already been initialized.
+    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+    /// @return The newly assigned tree id.
     function _init(SkinnyIMTData storage self) internal returns (uint256) {
         if (_isInitialized(self)) {
             revert AlreadyInitialized();
@@ -54,44 +51,12 @@ library InternalSkinnyIMT {
         }
         uint256 id = slot + 1;
         self.treeId = id;
-        emit NewTree(id);
         return id;
     }
 
-    function _sideNode(SkinnyIMTData storage self, uint256 index) internal view returns (uint256) {
-        return self.sideNodes[index];
-    }
-
-    // function _treeDepth(SkinnyIMTData storage self) internal view returns (uint256) {
-    //     if (self.sideNodes.length == 0) return 0;
-    //     return self.sideNodes.length - 1;
-    // }
-
-    // function _amountLeaves(SkinnyIMTData storage self) internal view returns (uint256) {
-    //     return self.leaves.length;
-    // }
-
-    // function _updateSideNode(SkinnyIMTData storage self, uint256 node, uint256 index) internal {
-    //     require(index <= self.sideNodes.length, "out of range");
-    //     if (self.sideNodes.length == index) {
-    //         self.sideNodes.push(node);
-    //     } else {
-    //         self.sideNodes[index] = node;
-    //     }
-    // }
-
-    // function _updateLeaves(SkinnyIMTData storage self, uint256 leaf, uint256 index) internal {
-    //     require(index <= self.leaves.length, "out of range");
-    //     if (self.leaves.length == index) {
-    //         self.leaves.push(leaf);
-    //     } else {
-    //         self.leaves[index] = leaf;
-    //     }
-    // }
-
     /// @dev Inserts a new leaf into the incremental merkle tree.
-    /// The function ensures that the leaf is valid according to the
-    /// constraints of the tree and then updates the tree's structure accordingly.
+    /// @notice Contracts using this function with snark based hash functions,
+    // need to check that the leaf is within the snark scalar field.
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @param leaf: The value of the new leaf to be inserted into the tree.
     /// @return The new hash of the node after the leaf has been inserted.
@@ -99,13 +64,6 @@ library InternalSkinnyIMT {
         if (_isInitialized(self) == false) {
             revert NotInitialized();
         }
-        if (leaf >= SNARK_SCALAR_FIELD) {
-            revert LeafGreaterThanSnarkScalarField();
-        }
-
-        // array
-        // uint256 index = self.leaves.length;
-        // mapping
         uint256 index = self.size;
 
         // Cache tree depth to optimize gas
@@ -118,18 +76,18 @@ library InternalSkinnyIMT {
             ++treeDepth;
         }
 
-        // mapping
         self.depth = treeDepth;
 
         uint256 node = leaf;
 
         for (uint256 level = 0; level < treeDepth; ) {
             if ((index >> level) & 1 == 1) {
+                // hash right
                 node = PoseidonT3.hash([self.sideNodes[level], node]);
             } else {
-                // array
-                //_updateSideNode(self, node, level);
-                // mapping
+                // leave to dangle:
+                // node is used in next iter, becomes it's own parent.
+                // Stored in sideNodes, for when it will have an right sibling eventually
                 self.sideNodes[level] = node;
             }
 
@@ -138,26 +96,16 @@ library InternalSkinnyIMT {
             }
         }
 
-        // array code
-        //self.sideNodes[treeDepth] = node;
-        //@TODO (Claude wrote this): inline branching here — if the tree grew this insert, sideNodes.length == treeDepth so we push; otherwise treeDepth < sideNodes.length and we direct-write self.sideNodes[treeDepth] = node. Skips the helper's require + length read + branch on the hot path.
-        // Est. savings: ~100-200 gas per _insert call (one redundant SLOAD on warm sideNodes.length for the require, plus the require string load + compare, plus internal call JUMP overhead). Roughly a 0.2-0.5% dent in a ~50k-gas warm insert.
-        // _updateSideNode(self, node, treeDepth);
-        // self.leaves.push(leaf);
-
-        // mapping code
         self.sideNodes[treeDepth] = node;
-        //self.leaves[index] = leaf;
         // original did self.size = index++ above
         // since self.leaves[leaf] = index + 1. But that is no longer true
         self.size = index + 1;
-        emit NewLeaf(self.treeId, index, leaf);
         return node;
     }
 
     /// @dev Inserts many leaves into the incremental merkle tree.
-    /// The function ensures that the leaves are valid according to the
-    /// constraints of the tree and then updates the tree's structure accordingly.
+    /// @notice Contracts using this function with snark based hash functions,
+    // need to check that the leafs are within the snark scalar field.
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @param leaves: The values of the new leaves to be inserted into the tree.
     /// @return The root after the leaves have been inserted.
@@ -165,30 +113,8 @@ library InternalSkinnyIMT {
         if (_isInitialized(self) == false) {
             revert NotInitialized();
         }
-        // Cache tree size to optimize gas
-        // array
-        // uint256 treeSize = _amountLeaves(self);
-        // mapping
+        // cache treeSize
         uint256 treeSize = self.size;
-
-        // Check that all the new values are correct to be added.
-        uint256 treeId = self.treeId;
-        for (uint256 i = 0; i < leaves.length; ) {
-            if (leaves[i] >= SNARK_SCALAR_FIELD) {
-                revert LeafGreaterThanSnarkScalarField();
-            }
-
-            // array
-            // self.leaves.push(leaves[i]);
-
-            //self.leaves[treeSize + i] = leaves[i];
-
-            emit NewLeaf(treeId, treeSize + i, leaves[i]);
-
-            unchecked {
-                ++i;
-            }
-        }
 
         // Array to save the nodes that will be used to create the next level of the tree.
         uint256[] memory currentLevelNewNodes;
@@ -196,9 +122,6 @@ library InternalSkinnyIMT {
         currentLevelNewNodes = leaves;
 
         // Cache tree depth to optimize gas
-        // array
-        // uint256 treeDepth = _treeDepth(self);
-        // mapping
         uint256 treeDepth = self.depth;
 
         // Calculate the depth of the tree after adding the new values.
@@ -207,8 +130,6 @@ library InternalSkinnyIMT {
         while (2 ** treeDepth < treeSize + leaves.length) {
             ++treeDepth;
         }
-
-        // mapping
         self.depth = treeDepth;
 
         // First index to change in every level.
@@ -234,7 +155,6 @@ library InternalSkinnyIMT {
 
                 // Assign the left node using the saved path or the position in the array.
                 if ((i + nextLevelStartIndex) * 2 < currentLevelStartIndex) {
-                    //leftNode = self.sideNodes[level];
                     hasherInput[0] = self.sideNodes[level];
                 } else {
                     hasherInput[0] = currentLevelNewNodes[(i + nextLevelStartIndex) * 2 - currentLevelStartIndex];
@@ -242,13 +162,16 @@ library InternalSkinnyIMT {
 
                 uint256 parentNode;
 
-                // Existence of a right child is an index check, not a value check —
-                // zero is a valid leaf now, so `hasherInput[1] == 0` can't be used as a proxy.
+                // Existence of a right child by checking index
+                // zero is a valid leaf now, so `rightChild == 0` can't be used as a proxy.
                 // If a right child exists: assign it and hash(left, right). Otherwise: parent = left.
                 if ((i + nextLevelStartIndex) * 2 + 1 < currentLevelSize) {
                     hasherInput[1] = currentLevelNewNodes[(i + nextLevelStartIndex) * 2 + 1 - currentLevelStartIndex];
                     parentNode = PoseidonT3.hash(hasherInput);
                 } else {
+                    // leave to dangle:
+                    // node is used in next iter, becomes it's own parent.
+                    // Stored in sideNodes, for when it will have an right sibling eventually
                     parentNode = hasherInput[0];
                 }
 
@@ -266,19 +189,8 @@ library InternalSkinnyIMT {
             // If it is even and there is only one element, there is no need to save anything because
             // the correct value for this level was already saved before.
             if (currentLevelSize & 1 == 1) {
-                // array
-                //@TODO (Claude wrote this): inline branching — insertMany can grow the tree by multiple levels, so for level >= oldTreeDepth we need push, for level < oldTreeDepth we direct-write. Could cache oldTreeDepth before the while-loop that bumps treeDepth and branch off that, instead of paying the helper's length read every iteration.
-                // Est. savings: ~100-200 gas per level iteration. Multiplied by treeDepth (loop runs `treeDepth` times, hitting this branch ~half the iterations on average), expect ~1-3k gas total per _insertMany call for a depth-20 tree.
-                //_updateSideNode(self, currentLevelNewNodes[currentLevelNewNodes.length - 1], level);
-
                 self.sideNodes[level] = currentLevelNewNodes[currentLevelNewNodes.length - 1];
             } else if (currentLevelNewNodes.length > 1) {
-                //array
-                //@TODO (Claude wrote this): same as above — branch on cached oldTreeDepth: push when level >= oldTreeDepth, direct-write otherwise.
-                // Est. savings: ~100-200 gas per hit. This branch fires less often than the odd-size one (only on even currentLevelSize with >1 element), so total impact is smaller — typically a few hundred gas per _insertMany.
-                //_updateSideNode(self, currentLevelNewNodes[currentLevelNewNodes.length - 2], level);
-
-                // mapping
                 self.sideNodes[level] = currentLevelNewNodes[currentLevelNewNodes.length - 2];
             }
 
@@ -303,16 +215,8 @@ library InternalSkinnyIMT {
         }
 
         // Update tree size
-        // mapping
         self.size = treeSize + leaves.length;
 
-        // Update tree root
-        // array
-        //@TODO (Claude wrote this): inline branching — push when treeDepth == sideNodes.length (root slot doesn't exist yet because the tree grew), direct-write otherwise. Same shape as the _insert root write above.
-        // Est. savings: ~100-200 gas per _insertMany call. Negligible relative to the per-level Poseidon hashes (~1-2k gas each), but free if you're already inlining the loop sites above.
-        //_updateSideNode(self, currentLevelNewNodes[0], treeDepth);
-
-        // mapping
         self.sideNodes[treeDepth] = currentLevelNewNodes[0];
 
         return currentLevelNewNodes[0];
@@ -323,10 +227,13 @@ library InternalSkinnyIMT {
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @param oldLeaf: The value of the leaf that is to be updated.
     /// @param newLeaf: The new value that will replace the oldLeaf in the tree.
+    /// @param index: The index of the leaf to be updated.
     /// @param siblingNodes: An array of sibling nodes that are necessary to recalculate the path to the root.
     /// @return The new hash of the updated node after the leaf has been updated.
     /// @notice Requires collision-resistant hashing: `if (self.sideNodes[level] == oldRoot)` identifies
     /// which sideNode to refresh by hash equality, so a collision between two distinct subtree roots would corrupt tree state silently.
+    /// @notice Contracts using this function with snark based hash functions,
+    /// need to check that the old and newLeaf and siblingNodes are within the snark scalar field.
     function _update(
         SkinnyIMTData storage self,
         uint256 oldLeaf,
@@ -337,38 +244,24 @@ library InternalSkinnyIMT {
         if (_isInitialized(self) == false) {
             revert NotInitialized();
         }
-        // mapping
+        // Cache tree depth to optimize gas
         uint256 treeDepth = self.depth;
-        if (newLeaf >= SNARK_SCALAR_FIELD) {
-            revert LeafGreaterThanSnarkScalarField();
-        } else if (siblingNodes.length > treeDepth) {
+        if (siblingNodes.length > treeDepth) {
             revert WrongSiblingNodes();
         }
-        //  else if (!_has(self, oldLeaf, index, siblingNodes)) {
-        //     revert LeafDoesNotExist();
-        // }
-        // @TODO we can remove _has here? It's cheap early check, but the siblingNodes is being used to merkle inclusion proof the oldLeaf any way below
 
+        // 2 vars to store intermediate hashes, to hash up to oldRoot and newRoot
         uint256 node = newLeaf;
         uint256 oldRoot = oldLeaf;
-
-        // array
-        // uint256 lastIndex = self.leaves.length - 1;
 
         uint256 lastIndex = self.size - 1;
 
         uint256 i = 0;
 
-        // Cache tree depth to optimize gas
-        // array
-        // uint256 treeDepth = _treeDepth(self);
-
+        // verify merkle proof of oldLeaf from siblingNodes
+        // and at the same time calculate the newRoot
         for (uint256 level = 0; level < treeDepth; ) {
             if ((index >> level) & 1 == 1) {
-                if (siblingNodes[i] >= SNARK_SCALAR_FIELD) {
-                    revert LeafGreaterThanSnarkScalarField();
-                }
-
                 node = PoseidonT3.hash([siblingNodes[i], node]);
                 oldRoot = PoseidonT3.hash([siblingNodes[i], oldRoot]);
 
@@ -377,10 +270,6 @@ library InternalSkinnyIMT {
                 }
             } else {
                 if (index >> level != lastIndex >> level) {
-                    if (siblingNodes[i] >= SNARK_SCALAR_FIELD) {
-                        revert LeafGreaterThanSnarkScalarField();
-                    }
-
                     if (self.sideNodes[level] == oldRoot) {
                         self.sideNodes[level] = node;
                     }
@@ -408,7 +297,6 @@ library InternalSkinnyIMT {
         self.sideNodes[treeDepth] = node;
 
         //self.leaves[index] = newLeaf;
-        emit UpdatedLeaf(self.treeId, index, newLeaf);
 
         return node;
     }
@@ -416,27 +304,28 @@ library InternalSkinnyIMT {
     /// @dev Checks if a leaf exists in the tree.
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @param leaf: The value of the leaf to check for existence.
+    /// @param index: The index of the leaf in the tree.
+    /// @param siblingNodes: An array of sibling nodes used to recompute the root for the given leaf.
     /// @return A boolean value indicating whether the leaf exists in the tree.
+    /// @notice Contracts using this function with snark based hash functions,
+    /// need to check that the leaf and siblingNodes are within the snark scalar field.
     function _has(
         SkinnyIMTData storage self,
         uint256 leaf,
         uint256 index,
-        uint256[] calldata siblings
+        uint256[] calldata siblingNodes
     ) internal view returns (bool) {
-        // array
-        // if (index >= self.leaves.length) {
-        // mapping
-        // if (index >= self.size) {
-        //     return false;
-        // } else {
-        //     return self.leaves[index] == leaf;
-        // }
-
-        uint256 rootSiblings = _rootFromSiblings(leaf, index, siblings);
+        uint256 rootSiblings = _rootFromSiblings(leaf, index, siblingNodes);
         return rootSiblings == _root(self);
     }
 
-    // @TODO this instead of _has so we can remove the leaves
+    /// @dev Hashes merkle proof and returns the root the leaf belongs to
+    /// @param leaf: The leaf to proof inclusion of
+    /// @param index: The index of the leaf within the tree.
+    /// @param siblingNodes: The sibling nodes along the path from the leaf to the root.
+    /// @return The root obtained from hashing the leaf with the provided siblings.
+    /// @notice Contracts using this function with snark based hash functions,
+    /// need to check that the leaf and siblingNodes are within the snark scalar field.
     function _rootFromSiblings(
         uint256 leaf,
         uint256 index,
@@ -444,34 +333,18 @@ library InternalSkinnyIMT {
     ) internal pure returns (uint256) {
         uint256 oldRoot = leaf;
 
-        // array
-        // uint256 lastIndex = self.leaves.length - 1;
-
         uint256 i = 0;
 
-        // Cache tree depth to optimize gas
-        // array
-        // uint256 treeDepth = _treeDepth(self);
-
-        // mapping
         uint256 proofDepth = siblingNodes.length;
 
         for (uint256 level = 0; level < proofDepth; ) {
             if ((index >> level) & 1 == 1) {
-                if (siblingNodes[i] >= SNARK_SCALAR_FIELD) {
-                    revert LeafGreaterThanSnarkScalarField();
-                }
-
                 oldRoot = PoseidonT3.hash([siblingNodes[i], oldRoot]);
 
                 unchecked {
                     ++i;
                 }
             } else {
-                if (siblingNodes[i] >= SNARK_SCALAR_FIELD) {
-                    revert LeafGreaterThanSnarkScalarField();
-                }
-
                 oldRoot = PoseidonT3.hash([oldRoot, siblingNodes[i]]);
 
                 unchecked {
