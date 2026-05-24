@@ -10,6 +10,7 @@ error LeafGreaterThanSnarkScalarField();
 
 event NewLeaf(uint256 indexed treeId, uint256 startIndex, uint256 leaves);
 event UpdatedLeaf(uint256 indexed treeId, uint256 indexed index, uint256 indexed leaf);
+event RepeatedLeafs(uint256 indexed startIndex, uint256 indexed endIndex, uint256 indexed leaf);
 event NewTree(uint256 indexed treeId);
 
 library SkinnyIMT {
@@ -66,32 +67,40 @@ library SkinnyIMT {
         return InternalSkinnyIMT._insertMany(self, leaves, hasher);
     }
 
-    /// @dev Appends `amount` copies of `value` to the tree.
-    /// @notice `O(log(size + amount))` hashes — see `InternalSkinnyIMT._insertManyRepeated`.
-    /// Calldata is `O(1)` (just `value` and `amount`). Subsequent calls with the same
+    /// @notice Appends `amount` copies of `value` to the tree.
+    /// @dev O(log(size + amount)) hashes — see `InternalSkinnyIMT._insertManyRepeated`.
+    /// Calldata is O(1) (just `value` and `amount`). Subsequent calls with the same
     /// `value` are cheaper because the per-level repeated-subtree cache persists
     /// in storage; use `precomputeRepeatedCache` to warm the cache ahead of time.
-    /// @notice No per-leaf events. Callers reconstruct ranges off-chain from
+    /// No per-leaf events are emitted; callers reconstruct ranges off-chain from
     /// `(size, depth)` and the constant `value`.
-    /// @notice Checks that `value` is within the snark scalar field.
-    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
-    /// @param value: The leaf value to insert `amount` copies of.
-    /// @param amount: The number of leaves to append.
-    /// @return The root after the leaves have been appended.
-    function insertManyRepeated(SkinnyIMTData storage self, uint256 value, uint256 amount) public returns (uint256) {
+    /// Reverts if `value` is not within the snark scalar field.
+    /// @param self A storage reference to the `SkinnyIMTData` struct.
+    /// @param value The leaf value to insert `amount` copies of.
+    /// @param amount The number of leaves to append.
+    /// @return _root The new root after the leaves have been appended.
+    /// @return _startIndex The index of the first inserted leaf.
+    /// @return _endIndex The index of the last inserted leaf.
+    function insertManyRepeated(SkinnyIMTData storage self, uint256 value, uint256 amount) public returns (uint256 _root, uint256 _startIndex, uint256 _endIndex) {
         if (value >= SNARK_SCALAR_FIELD) {
             revert LeafGreaterThanSnarkScalarField();
         }
-        return InternalSkinnyIMT._insertManyRepeated(self, value, amount, hasher);
+        (_root,_startIndex,_endIndex) = InternalSkinnyIMT._insertManyRepeated(self, value, amount, hasher);
+        emit RepeatedLeafs(_startIndex, _endIndex, value );
+        return (_root,_startIndex,_endIndex);
     }
 
     /// @dev Convenience wrapper for the common `value == 0` case.
     /// @notice No scalar-field check: zero is always in-field.
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @param amount: The number of zero leaves to append.
-    /// @return The root after the zero leaves have been appended.
-    function insertManyZeros(SkinnyIMTData storage self, uint256 amount) public returns (uint256) {
-        return InternalSkinnyIMT._insertManyRepeated(self, 0, amount, hasher);
+    /// @return _root The new root after the leaves have been appended.
+    /// @return _startIndex The index of the first inserted leaf.
+    /// @return _endIndex The index of the last inserted leaf.
+    function insertManyZeros(SkinnyIMTData storage self, uint256 amount) public returns (uint256 _root, uint256 _startIndex, uint256 _endIndex) {
+        (_root,_startIndex,_endIndex) = InternalSkinnyIMT._insertManyRepeated(self, 0, amount, hasher);
+        emit RepeatedLeafs(_startIndex, _endIndex, 0 );
+        return (_root,_startIndex,_endIndex);
     }
 
     /// @dev Pre-populates the repeated-subtree cache for `value` up to `upToLevel`.

@@ -192,7 +192,6 @@ library InternalSkinnyIMT {
                     nextLevelNewNodes[i] = hasherInput[0];
                 }
 
-
                 unchecked {
                     ++i;
                 }
@@ -200,13 +199,14 @@ library InternalSkinnyIMT {
 
             // Update the `sideNodes` variable.
             // sideNodes are always at the edge of the tree, and are always the leftChild
-            // 
+            //
             // If `currentLevelSize` is odd, the saved value will be the last value of the array
             // if it is even and there are more than 1 element in `currentLevelNewNodes`, the saved value
             // will be the value before the last one.
             // If it is even and there is only one element, there is no need to save anything because
             // the correct value for this level was already saved before.
-            if (currentLevelSize & 1 == 1) { // currentLevelSize % 2 == 1, is odd
+            if (currentLevelSize & 1 == 1) {
+                // currentLevelSize % 2 == 1, is odd
                 // currentLevelSize = treeSize + leaves.length
                 // currentLevelSize = (currentLevelSize - 1) / 2 + 1
                 self.sideNodes[level] = currentLevelNewNodes[currentLevelNewNodes.length - 1];
@@ -265,189 +265,215 @@ library InternalSkinnyIMT {
     }
 
     /// @dev Appends `amount` leaves all equal to `value` into the tree.
-    /// @notice Costs `O(log(size + amount))` hashes regardless of `amount`. Instead
-    /// of running `_insert` once per leaf (which would walk the tree `amount` times),
-    /// this walks once and carries three values up the levels together:
+    /// @notice Worst case costs 3*newDepth hashes regardless of `amount`.
+    /// Best case cost 1*newDepth
     ///
-    ///   - `rightEdgeNode`         — value of the node on the rightmost path of the
-    ///                         new tree (the path from the newly-appended last
-    ///                         leaf up to the root). This is what a future
-    ///                         `_insert` will expect to find in the `sideNodes`
-    ///                         of the rightmost spine.
-    ///   - `lefEdgeNode`        — value of the node on the path of leaf `oldSize`
-    ///                         (the very first new leaf). Needed when the new
-    ///                         sideNode subtree straddles the old/new boundary —
-    ///                         i.e. it contains some pre-existing leaves on the
-    ///                         left of `oldSize` and some new `value` leaves on
-    ///                         the right.
-    ///   - `repeatedCenterNode` — the root of a fully-populated subtree of `value`s
-    ///                         at the current level, defined recursively as
-    ///                         `hasher(prev-level root, prev-level root)`.
-    ///                         Reused for any sideNode subtree that lies
-    ///                         entirely in the new-leaves region.
+    /// Only hashes 3 paths:
+    ///  repeatedCenterNode: in the center of the insert,
+    ///     these only contain nodes of "a balanced tree with only the same value repeating".
+    ///     ex: H(0,0), H(H(0,0),H(0,0)), etc
+    ///     Majority of the hashes the same as a repeatedCenterNode at every level.
+    ///     Re-using those hashes instead of re-hashing is the core of the optimization here
+    ///  lefBoundaryNodes: at the left of the insert who mix with the existing tree.
+    ///  rightEdgeNodes: at the right of the insert and tree, tracks potential dangling nodes to to root
+    ///         Eventually meets lefBoundaryNodes and creates the root.
     ///
-    /// `repeatedSubtree` values are cached in storage per `(value, level)` pair,
-    /// so subsequent calls with the same `value` skip those hashes entirely. The
-    /// first call pays one SSTORE per level; later calls pay only one SLOAD per
-    /// level. Use `_precomputeRepeatedCache` to warm the cache up front.
-    ///
-    /// `amount == 1` falls through to `_insert` because for a single leaf the
-    /// per-level overhead of maintaining three values plus the cache would
-    /// dominate.
-    /// @notice No per-leaf events: callers reconstruct ranges off-chain from
-    /// `(size, depth)` and the constant `value`. The wrapper at SkinnyIMT.sol level
-    /// matches that contract.
+    /// both lefBoundaryNodes and rightEdgeNodes use repeatedCenterNode to attach to the rest of the inserted sub tree.
+    /// Best case cost is O(1*newDepth) because both lefBoundaryNodes and rightEdgeNodes,
+    /// will use nodes from repeatedCenterNode when ever they can.
+    ///  And when a insert results in an balanced tree and previous tree is empty, that is alway the case.
+    ///  So it become O(1*newTreeDepth)
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @param value: The leaf value to insert `amount` copies of.
     /// @param amount: The number of leaves to append.
-    /// @return The root after the leaves have been appended.
+    /// @return root after the leaves have been appended.
+    /// @return firstIndex after the leaves have been appended.
+    /// @return lastIndex after the leaves have been appended.
     function _insertManyRepeated(
         SkinnyIMTData storage self,
         uint256 value,
         uint256 amount,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal returns (uint256) {
-        if (_isInitialized(self) == false) {
-            revert NotInitialized();
-        }
-        if (amount == 0) {
-            return _root(self);
-        }
-        if (amount == 1) {
-            return _insert(self, value, hasher);
-        }
-
-        uint256 oldSize = self.size;
-        uint256 treeDepth = self.depth;
-        uint256 lastIndex;
+    ) internal returns (uint256 root, uint256 firstIndex, uint256 lastIndex) {
+        uint256 newTreeDepth = self.depth;
+        firstIndex = self.size;
         {
             // `newSize` is only needed for depth growth and the size/lastIndex
             // assignments; scoped to a block so its slot is released before
             // the main loop (Solidity's 16-slot stack is tight here).
-            uint256 newSize = oldSize + amount;
-            while (2 ** treeDepth < newSize) {
+            uint256 newSize = firstIndex + amount;
+            while (2 ** newTreeDepth < newSize) {
                 unchecked {
-                    ++treeDepth;
+                    ++newTreeDepth;
                 }
             }
-            self.depth = treeDepth;
-            self.size = newSize;
+
+            if (_isInitialized(self) == false) {
+                revert NotInitialized();
+            }
+            if (amount == 0) {
+                return (_root(self), firstIndex, firstIndex);
+            }
+            // after above no-op, to prevent underflow
             lastIndex = newSize - 1;
+            if (amount == 1) {
+                return (_insert(self, value, hasher), firstIndex, lastIndex);
+            }
+
+            self.depth = newTreeDepth;
+            self.size = newSize;
         }
 
-        // Initial values at level 0:
-        //   rightEdgeNode = at the start does not contain any leafs of existing tree, but later will. Can also have some dangling nodes which also also throws off the cache
-        //   leftEdgeNode = The node that potentially mixes with the existing tree. There for are not guaranteed to be in cache
-        //   repeatedCenterNode = always balanced and only contains the repeated values. Always cache-able
+        // Nodes at the edges of the insert, and the center where the node only contains zeros:
+        //   lefBoundaryNode = The node at the boundary between the insert and existing tree.
+        //   rightEdgeNode = The node that is at the very edge of the tree.
+        //   repeatedCenterNode = The node that all sit in the center of the insert and
+        //      only contain repeated values and is always balanced. Always cache-able
+        uint256 leftBoundaryNode = value;
         uint256 rightEdgeNode = value;
-        uint256 lefEdgeNode = value;
         uint256 repeatedCenterNode = value;
 
-        for (uint256 level = 0; level < treeDepth; ) {
+        // loops only once over the newTreeDepth
+        // does at most 3 hashes,
+        // 2 hashes for the left and right side of the inserted values (lefEdgeNode, rightEdgeNode)
+        // 1 hash / cache lookup for the node that only contains zeros (repeatedCenterNode)
+        for (uint256 level = 0; level < newTreeDepth; ) {
+            // ------------assign sideNode --------------
             uint256 oldSideNode = self.sideNodes[level];
             uint256 newSideNode;
             {
-                // `newPosition` = position of the last leaf's ancestor at this level
-                //            (each step up halves the position, so it's `lastIndex / 2^level`).
-                // `boundaryPosition` = position of the first new leaf's ancestor at this level.
-                uint256 newPosition = lastIndex >> level;
-                uint256 boundaryPosition = oldSize >> level;
+                // calculate the current index of the most left and right node of the insert
+                // by doing: index >> level (same as: index / 2^level)
+                uint256 rightEdgePosition = lastIndex >> level;
+                uint256 leftBoundaryPosition = firstIndex >> level;
 
-                // The new sideNode at this level is the subtree whose position
-                // is the rightmost path's position rounded down to even — i.e. the
-                // left-of-the-pair node containing the rightmost path.
-                // Four cases for what that subtree contains:
-                if (newPosition & 1 == 0) {
-                    // The rightmost path is already at an even position (a left
-                    // child). So the rightmost-path node itself IS the sideNode.
+                // determine where the sideNode is at. Left,right, (somewhere) center of the inserted nodes or unchanged
+                // sideNode == rightEdgeNodeSibling (left sibling of rightEdge), unless dangles or if root
+                if (rightEdgePosition & 1 == 0) {
+                    // here rightEdgeNode is at an uneven index, because it is at the very edge of the entire tree,
+                    // it will have no sibling :(, it will "dangle" and thus will be the newSideNode
                     newSideNode = rightEdgeNode;
-                } else if (newPosition - 1 > boundaryPosition) {
-                    // The rightmost path is at an odd position (right child), so
-                    // the sideNode is its left sibling at `newPosition - 1`. That
-                    // sibling sits strictly to the right of the first-new-leaf's
-                    // ancestor, meaning its whole subtree is past `oldSize`. Since
-                    // the rightmost path is even further right, the sibling
-                    // subtree must be fully populated — value is the repeated-subtree root at this level.
+
+                    // these cases when rightEdgeNode does have a sibling :D
+                    // now we just detect who is that sibling. leftBoundary, repeatedCenter or oldSideNode?
+                } else if (leftBoundaryPosition < (rightEdgePosition - 1)) {
+                    // rightEdgeNode has a sibling :D
+                    // But that sibling is not leftBoundaryPosition yet, since the position of
+                    // the sibling of rightEdgeNode (rightEdgePosition - 1) is higher then leftBoundaryPosition
+                    // There for we need a sibling between the old tree and the very right edge,
+                    // we need repeatedCenterNode!
                     newSideNode = repeatedCenterNode;
-                } else if (newPosition - 1 == boundaryPosition) {
-                    // Same right-sibling case, but now the left sibling subtree IS
-                    // the one containing leaf `oldSize` — the boundary subtree
-                    // with pre-existing leaves on the left and new `value` leaves
-                    // on the right. Use the boundary value built up the levels.
-                    newSideNode = lefEdgeNode;
+                } else if (leftBoundaryPosition == (rightEdgePosition - 1)) {
+                    // Now rightEdgeNode's sibling positions is *exactly* leftBoundaryPosition
+                    // it's sibling is leftBoundaryNode!
+                    newSideNode = leftBoundaryNode;
                 } else {
-                    // Same right-sibling case, but the left sibling is strictly
-                    // to the left of `oldSize`'s ancestor — its subtree is
-                    // entirely pre-existing leaves, so its value cannot have
-                    // changed. The stored sideNode is still correct.
+                    // now leftBoundaryPosition is the same as rightEdgePosition
+                    // we know this because leftBoundaryPosition < rightEdgeSiblingPosition (else if #1)
+                    // and leftBoundaryPosition != rightEdgeSiblingPosition (else if #2)
+                    // and because node position only converge when moving up a tree, but never cross,
+                    // we can now say leftBoundaryNode is at the same position as rightEdgeNode
+                    // because leftBoundaryNode and rightEdgeNode are the same, they form a subTreeRoot that contains
+                    // all values we are inserting (sometimes some values of existing tree).
+                    // Now we need to just "attach" this root with our inserts to the existing tree
+                    // simply by constantly hashing in the oldSideNode of that level.
                     newSideNode = oldSideNode;
                 }
             }
 
+            // something happened, store it!
             if (newSideNode != oldSideNode) {
                 self.sideNodes[level] = newSideNode;
             }
 
-            // Lift pathValue one level up. The last leaf is in either the left or
-            // right child of its parent at this level — check by looking at the
-            // parity of its position at this level:
-            //   - odd position (right child): combine with the left sibling
-            //     (the sideNode we just figured out) to get the parent's value.
-            //   - even position (left child): the right sibling has no descendants,
-            //     so by the dangling rule the parent's value equals the left
-            //     child's value — pathValue is unchanged.
-            
-            // calculate index of the newSide node at this level and check if it's odd or even
-            // oldSize / (2**level) % 2
-            // if odd it means rightEdgeNode has a left sibling is not allowed to dangle
-            // so it needs to be hashed on this level.
+            //-------- hashing -----------------
+            {
+                // ---- repeatedCenterNode---
+                // newRepeatedCenterNode use a cache to look hashes from a "balanced tree with only repeated values"
+                uint256 newRepeatedCenterNode = _hashWithCache(self, repeatedCenterNode, hasher);
 
-            // @TODO when newPosition & 1 == 0, newSideNode == rightEdgeNode
-            // in a lott but not every case rightEdgeNode is a cache-able value
-            // in the cases it's not is either because the left edge node started dangling
-            // or the left side of the existing tree is mixing in, but that could still be cache-able if the tree had the same repeatingValue in it
-            if ((lastIndex >> level) & 1 == 1) {
-                rightEdgeNode = hasher([newSideNode, rightEdgeNode]);
-            }
+                // ----leftBoundaryNode---
+                // calculate index of the left boundary node at this level and check if it's odd or even, left or right
+                // oldSize / (2**level) % 2
+                {
+                    // redoing calculation here because of stack limits
+                    // uint256 leftBoundaryPosition = firstIndex >> level; over stack limit again :/
+                    uint256 nextRightEdgePosition = lastIndex >> (level + 1);
+                    uint256 nextLeftEdgePosition = firstIndex >> (level + 1);
 
-            // Lift boundary one level up. Same idea, but for the first-new-leaf's
-            // path (leaf `oldSize`):
-            //   - `oldSize` is the right child at this level: the left sibling
-            //     subtree is entirely pre-existing leaves, so it equals the
-            //     OLD stored sideNode.
-            //   - `oldSize` is the left child at this level: the right sibling
-            //     subtree is entirely in the new-leaves region. While the boundary
-            //     and rightmost paths haven't yet merged (the boundary subtree
-            //     isn't itself the rightmost subtree), that right sibling is
-            //     fully populated, so its value is the repeated-subtree root at this level.
-            //
-            // Once the two paths converge at the top of the tree, this formula
-            // becomes stale (the right sibling may actually be partially
-            // populated). At that point `boundary` is no longer read for any
-            // sideNode decision, so the stale write is harmless.
+                    // we can skip leftBoundaryNode if the next iter rightEdgeNode is at the same position
+                    // at that point leftBoundaryNode does the same as rightEdgeNode,
+                    // so no need to do things twice
+                    if (nextLeftEdgePosition != nextRightEdgePosition) {
+                        // if leftBoundaryPosition is right
+                        if ((firstIndex >> level) & 1 == 1) {
+                            // if right use oldSideNode, since that is where these added nodes "attach" to the
+                            // existing tree
+                            if (leftBoundaryNode == repeatedCenterNode && oldSideNode == repeatedCenterNode) {
+                                // no need to hash, already done by newRepeatedCenterNode!
+                                // oldSideNode was just a N-hashed repeated value
+                                leftBoundaryNode = newRepeatedCenterNode;
+                            } else {
+                                // existing tree had something else, no luck!
+                                leftBoundaryNode = hasher([oldSideNode, leftBoundaryNode]);
+                            }
+                        } else {
+                            // if left, use the repeatedCenterNode,
+                            // (could be one if but requires another var on the stack)
+                            if (leftBoundaryNode == repeatedCenterNode) {
+                                // no need to hash, already done by newRepeatedCenterNode!
+                                leftBoundaryNode = newRepeatedCenterNode;
+                            } else {
+                                // our boundary node picked up an existing value from the existing tree
+                                // that is not our value we are repeatedly inserting. No luck :(
+                                leftBoundaryNode = hasher([leftBoundaryNode, repeatedCenterNode]);
+                            }
+                        }
+                    }
+                }
 
-            // calculate index of the boundary node at this level and check if it's odd or even
-            // oldSize / (2**level) % 2
-            if ((oldSize >> level) & 1 == 1) {
-                lefEdgeNode = hasher([oldSideNode, lefEdgeNode]);
-            } else {
-                lefEdgeNode = hasher([lefEdgeNode, repeatedCenterNode]);
+                // ---- rightEdgeNode ---
+                // calculate index of the newSide node at this level and check if it's odd or even
+                // rightEdgePosition = (lastIndex / (2**level)) % 2
+                if ((lastIndex >> level) & 1 == 1) {
+                    // if odd rightEdgeNode has a sibling so we hash it right
+                    if (newSideNode == rightEdgeNode) {
+                        // we are doing hasher([rightEdgeNode, rightEdgeNode])
+                        if (repeatedCenterNode == rightEdgeNode) {
+                            // it's just a center node
+                            rightEdgeNode = newRepeatedCenterNode;
+                        } else {
+                            // we might be doing hasher([rightEdgeNode, rightEdgeNode])
+                            // as a coincidence. Or we did do a "balanced tree with only repeated values" hash
+                            // check the cache
+                            uint256 cached = self.repeatedHashCache[rightEdgeNode];
+                            if (cached != 0) {
+                                rightEdgeNode = cached; // free hash
+                            } else {
+                                // not storing this because it might have been a coincidence
+                                rightEdgeNode = hasher([rightEdgeNode, rightEdgeNode]);
+                            }
+                        }
+                    } else {
+                        rightEdgeNode = hasher([newSideNode, rightEdgeNode]);
+                    }
+                }
+                // we don't do the left case since we need to leave rightEdgeNode to dangle
+
+                // repeatedCenterNode updates for the next iter
+                repeatedCenterNode = newRepeatedCenterNode;
             }
 
             // Advance level first so it doubles as `nextLevel` for the cache lift.
             unchecked {
                 ++level;
             }
-
-            // hash(repeatedCenterNode, repeatedCenterNode), via the f(x) = H(x, x)
-            // memo cache (fills the cache on miss).
-            repeatedCenterNode = _hashWithCache(self, repeatedCenterNode, hasher);
         }
 
-        // `sideNodes[treeDepth]` always stores the root (see `_root`). After the
-        // loop, the rightmost path at the top level IS the new root.
-        self.sideNodes[treeDepth] = rightEdgeNode;
-        return rightEdgeNode;
+        // finally store the root!
+        root = rightEdgeNode;
+        self.sideNodes[newTreeDepth] = root;
+        return (root, firstIndex, lastIndex);
     }
 
     /// @dev Warms the `(value, level)` cache for levels 1..`upToLevel` so that
@@ -494,7 +520,8 @@ library InternalSkinnyIMT {
     /// @param siblingNodes: An array of sibling nodes that are necessary to recalculate the path to the root.
     /// @return The new hash of the updated node after the leaf has been updated.
     /// @notice Requires collision-resistant hashing: `if (self.sideNodes[level] == oldRoot)` identifies
-    /// which sideNode to refresh by hash equality, so a collision between two distinct subtree roots would corrupt tree state silently.
+    /// which sideNode to refresh by hash equality,
+    /// so a collision between two distinct subtree roots would corrupt tree state silently.
     /// @notice Contracts using this function with snark based hash functions,
     /// need to check that the old and newLeaf and siblingNodes are within the snark scalar field.
     function _update(

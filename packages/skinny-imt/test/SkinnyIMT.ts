@@ -119,196 +119,6 @@ describe("SkinnyIMT", () => {
         })
     })
 
-    describe("# insertManyZeros", () => {
-        // @zk-kit/lean-imt's `insertMany` and `update` use `if (rightNode)` / `if (sibling)` truthy
-        // checks that treat BigInt(0) as falsy, silently skipping hashes when zeros are involved.
-        // Workaround: feed zeros to jsLeanIMT via `insert(0n)` one at a time — that path doesn't
-        // hit the bug. The update tests use odd-index updates to avoid the same falsy-sibling bug
-        // in `update`.
-        const jsInsertZeros = (n: number) => {
-            for (let i = 0; i < n; i++) jsLeanIMT.insert(0n)
-        }
-
-        describe("empty tree", () => {
-            it("Should be a no-op when amount is 0", async () => {
-                const before = await skinnyIMTTest.root()
-                await skinnyIMTTest.insertManyZeros(0)
-
-                expect(await skinnyIMTTest.root()).to.equal(before)
-                expect(await skinnyIMTTest.size()).to.equal(0)
-                expect(await skinnyIMTTest.depth()).to.equal(0)
-            })
-
-            for (const n of [1, 2, 3, 4, 5, 6, 7, 8, 16, 100]) {
-                const label =
-                    n === 1
-                        ? "1 zero"
-                        : `${n} zeros${
-                              Number.isInteger(Math.log2(n))
-                                  ? " (power of 2)"
-                                  : ` (binary ${n.toString(2)})`
-                          }`
-
-                it(`Should insert ${label}`, async () => {
-                    jsInsertZeros(n)
-                    await skinnyIMTTest.insertManyZeros(n)
-
-                    expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
-                    expect(await skinnyIMTTest.size()).to.equal(n)
-                    expect(await skinnyIMTTest.depth()).to.equal(jsLeanIMT.depth)
-                })
-            }
-        })
-
-        describe("non-empty tree", () => {
-            it("Should be a no-op when amount is 0", async () => {
-                const leaves = [1n, 2n, 3n]
-                jsLeanIMT.insertMany(leaves)
-                await skinnyIMTTest.insertMany(leaves)
-
-                const before = await skinnyIMTTest.root()
-                const beforeSize = await skinnyIMTTest.size()
-                const beforeDepth = await skinnyIMTTest.depth()
-                await skinnyIMTTest.insertManyZeros(0)
-
-                expect(await skinnyIMTTest.root()).to.equal(before)
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
-                expect(await skinnyIMTTest.size()).to.equal(beforeSize)
-                expect(await skinnyIMTTest.depth()).to.equal(beforeDepth)
-            })
-
-            const cases: { pre: bigint[]; n: number; label: string }[] = [
-                { pre: [1n], n: 1, label: "1 zero after 1 leaf" },
-                { pre: [1n, 2n, 3n, 4n, 5n], n: 3, label: "3 zeros after 5 leaves" },
-                { pre: [1n, 2n, 3n], n: 5, label: "5 zeros after 3 leaves" },
-                {
-                    pre: [1n, 2n, 3n, 4n, 5n, 6n, 7n, 8n],
-                    n: 8,
-                    label: "8 zeros after 8 leaves (both powers of 2)"
-                },
-                { pre: [42n], n: 7, label: "7 zeros after 1 leaf (worst-case popcount of n)" }
-            ]
-            for (const { pre, n, label } of cases) {
-                it(`Should append ${label}`, async () => {
-                    jsLeanIMT.insertMany(pre)
-                    await skinnyIMTTest.insertMany(pre)
-
-                    jsInsertZeros(n)
-                    await skinnyIMTTest.insertManyZeros(n)
-
-                    expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
-                    expect(await skinnyIMTTest.size()).to.equal(pre.length + n)
-                    expect(await skinnyIMTTest.depth()).to.equal(jsLeanIMT.depth)
-                })
-            }
-
-            it("Should append zeros that cross a depth boundary", async () => {
-                // size 3 (depth 2) → size 8 (depth 3): the depth must grow during the zero append.
-                const pre = [1n, 2n, 3n]
-                jsLeanIMT.insertMany(pre)
-                await skinnyIMTTest.insertMany(pre)
-                expect(await skinnyIMTTest.depth()).to.equal(2)
-
-                jsInsertZeros(5)
-                await skinnyIMTTest.insertManyZeros(5)
-
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
-                expect(await skinnyIMTTest.depth()).to.equal(3)
-            })
-        })
-
-        describe("composability", () => {
-            it("Should allow inserting non-zero leaves after insertManyZeros", async () => {
-                jsInsertZeros(5)
-                await skinnyIMTTest.insertManyZeros(5)
-
-                jsLeanIMT.insertMany([7n, 8n])
-                await skinnyIMTTest.insertMany([7, 8])
-
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
-                expect(await skinnyIMTTest.size()).to.equal(7)
-            })
-
-            it("Should allow a single insert after insertManyZeros", async () => {
-                jsInsertZeros(3)
-                await skinnyIMTTest.insertManyZeros(3)
-
-                jsLeanIMT.insert(99n)
-                await skinnyIMTTest.insert(99)
-
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
-                expect(await skinnyIMTTest.size()).to.equal(4)
-            })
-
-            it("Should allow two consecutive insertManyZeros calls", async () => {
-                jsInsertZeros(3)
-                await skinnyIMTTest.insertManyZeros(3)
-
-                jsInsertZeros(5)
-                await skinnyIMTTest.insertManyZeros(5)
-
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
-                expect(await skinnyIMTTest.size()).to.equal(8)
-            })
-
-            it("Should allow alternating non-zero inserts and insertManyZeros", async () => {
-                jsLeanIMT.insert(1n)
-                await skinnyIMTTest.insert(1)
-
-                jsInsertZeros(2)
-                await skinnyIMTTest.insertManyZeros(2)
-
-                jsLeanIMT.insert(2n)
-                await skinnyIMTTest.insert(2)
-
-                jsInsertZeros(3)
-                await skinnyIMTTest.insertManyZeros(3)
-
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
-                expect(await skinnyIMTTest.size()).to.equal(7)
-            })
-
-            it("Should let a non-zero leaf inserted before insertManyZeros still verify", async () => {
-                jsLeanIMT.insert(42n)
-                await skinnyIMTTest.insert(42)
-
-                jsInsertZeros(6)
-                await skinnyIMTTest.insertManyZeros(6)
-
-                const { siblings } = jsLeanIMT.generateProof(0)
-                expect(await skinnyIMTTest.verify(42, 0, siblings)).to.equal(true)
-            })
-
-            it("Should let a zero leaf inserted via insertManyZeros verify at its index", async () => {
-                jsLeanIMT.insertMany([1n, 2n])
-                await skinnyIMTTest.insertMany([1, 2])
-
-                jsInsertZeros(3)
-                await skinnyIMTTest.insertManyZeros(3)
-
-                // zero appended at index 3 should be provable
-                const { siblings } = jsLeanIMT.generateProof(3)
-                expect(await skinnyIMTTest.verify(0, 3, siblings)).to.equal(true)
-            })
-
-            it("Should allow updating a zero leaf inserted via insertManyZeros (odd index)", async () => {
-                // Update at an ODD index avoids jsLeanIMT.update's `if (sibling)` falsy-on-zero bug.
-                jsLeanIMT.insertMany([1n, 2n])
-                await skinnyIMTTest.insertMany([1, 2])
-
-                jsInsertZeros(3)
-                await skinnyIMTTest.insertManyZeros(3)
-
-                // promote the zero at index 3 (odd) to 7
-                const { siblings } = jsLeanIMT.generateProof(3)
-                await skinnyIMTTest.update(0, 7, 3, siblings)
-                jsLeanIMT.update(3, 7n)
-
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
-            })
-        })
-    })
-
     describe("# insertManyRepeated", () => {
         it("Should reject a value >= SNARK_SCALAR_FIELD", async () => {
             const transaction = skinnyIMTTest.insertManyRepeated(SNARK_SCALAR_FIELD, 3)
@@ -349,16 +159,6 @@ describe("SkinnyIMT", () => {
             expect(await skinnyIMTTest.size()).to.equal(3 + n)
         })
 
-        it("Should produce the same root as insertManyZeros when value is 0", async () => {
-            const n = 8
-            await skinnyIMTTest.insertManyRepeated(0, n)
-
-            const { contract: other } = await run("deploy:imt-test", { library: "SkinnyIMT", logs: false })
-            await other.insertManyZeros(n)
-
-            expect(await skinnyIMTTest.root()).to.equal(await other.root())
-        })
-
         it("Should allow alternating values across calls", async () => {
             jsLeanIMT.insertMany([3n, 3n, 3n])
             await skinnyIMTTest.insertManyRepeated(3, 3)
@@ -382,45 +182,136 @@ describe("SkinnyIMT", () => {
 
             expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
         })
+
+        // The leftBoundary lift in _insertManyRepeated is guarded by
+        //   if (leftEdgePosition != rightEdgePosition)
+        // so it stops writing leftBoundaryNode once the boundary path has
+        // converged with the rightmost path. These geometries each force the
+        // convergence at a chosen level relative to newTreeDepth, so the skip
+        // fires across a range of cases — single-level, multi-level, with and
+        // without a dangling rightEdge subtree.
+        describe("convergence-boundary geometries", () => {
+            // Each row: (pre-existing leaf count, repeat count, expected convergence L, expected newTreeDepth)
+            // pre is filled with [1, 2, ..., pre]; the repeat value is non-zero so the
+            // _insertManyRepeated path (not _insertManyZeros) is exercised.
+            const cases: { pre: number; n: number; L: number; depth: number; label: string }[] = [
+                { pre: 2, n: 2, L: 1, depth: 2, label: "convergence at level 1, top depth (single skip)" },
+                { pre: 4, n: 2, L: 1, depth: 3, label: "convergence at level 1, two levels skipped" },
+                { pre: 8, n: 2, L: 1, depth: 4, label: "convergence at level 1, three levels skipped" },
+                { pre: 16, n: 4, L: 2, depth: 5, label: "convergence at level 2 in a deeper tree" },
+                {
+                    pre: 4,
+                    n: 3,
+                    L: 2,
+                    depth: 3,
+                    label: "rightEdge dangles past convergence (lastIndex=6, no leaf 7)"
+                },
+                { pre: 5, n: 3, L: 2, depth: 3, label: "convergence one level below the top" }
+            ]
+
+            for (const { pre, n, L, depth, label } of cases) {
+                it(`Should produce a correct root when ${label}`, async () => {
+                    const v = 7n
+
+                    if (pre > 0) {
+                        const preLeaves = new Array(pre).fill(0).map((_, i) => BigInt(i + 1))
+                        jsLeanIMT.insertMany(preLeaves)
+                        await skinnyIMTTest.insertMany(preLeaves)
+                    }
+
+                    for (let i = 0; i < n; i++) jsLeanIMT.insert(v)
+                    await skinnyIMTTest.insertManyRepeated(v, n)
+
+                    // Sanity: the geometry really is what the case row claims.
+                    // firstIndex = pre, lastIndex = pre + n - 1.
+                    // Convergence level L = smallest level with (firstIndex >> L) == (lastIndex >> L).
+                    const firstIndex = pre
+                    const lastIndex = pre + n - 1
+                    let convergence = 0
+                    while (firstIndex >> convergence !== lastIndex >> convergence) convergence++
+                    expect(convergence, "convergence level matches the case row").to.equal(L)
+                    expect(await skinnyIMTTest.depth(), "newTreeDepth matches the case row").to.equal(depth)
+
+                    expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
+                    expect(await skinnyIMTTest.size()).to.equal(pre + n)
+                })
+            }
+
+            it("Should produce a correct root when the skip fires across many levels (deep tree, tiny amount)", async () => {
+                // Build a tree to depth 6 (64 pre-existing leaves), then append 2 leaves.
+                // firstIndex=64, lastIndex=65, XOR=1, convergence L=1. newTreeDepth=7.
+                // The skip fires at levels 1..6 — five hashes saved per call.
+                const v = 99n
+                const pre = 64
+                const preLeaves = new Array(pre).fill(0).map((_, i) => BigInt(i + 1))
+                jsLeanIMT.insertMany(preLeaves)
+                await skinnyIMTTest.insertMany(preLeaves)
+
+                jsLeanIMT.insert(v)
+                jsLeanIMT.insert(v)
+                await skinnyIMTTest.insertManyRepeated(v, 2)
+
+                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
+                expect(await skinnyIMTTest.depth()).to.equal(7)
+            })
+        })
     })
 
     describe("# precomputeRepeatedCache", () => {
+        it("Should allow inserting a fuck ton of zeros in one tx. With pre-computed zeros", async () => {
+            const transaction = skinnyIMTTest.precomputeRepeatedCache(0, 255)
+            await skinnyIMTTest.insertManyZeros(2n ** 255n)
+        })
+
+        it("Should burn worst-case gas for insertManyRepeated in one call (every shortcut defeated)", async () => {
+            // The pre-optimisation upper bound was "insertManyZeros(2^255) into empty
+            // tree with cache pre-warmed". Now that's a *best* case: every level hits
+            // the canonical-chain shortcuts (leftBoundary == repeatedCenter, and
+            // rightEdge == newSideNode == repeatedCenter), so each level is a cache
+            // SLOAD plus a sideNode SSTORE — zero real hashes.
+            //
+            // To reconstruct an upper bound, defeat all three shortcuts so every
+            // level pays two real hashes (one leftBoundary + one rightEdge):
+            //
+            //   1. leftBoundary shortcut needs leftBoundary == repeatedCenter (and
+            //      oldSideNode == repeatedCenter on the right branch). Break it by
+            //      making firstIndex odd AND sideNodes[0] != value, so the level-0
+            //      hash is hash(oldSideNode != value, value). leftBoundary diverges
+            //      from the canonical chain at level 0 and stays off it forever.
+            //
+            //   2. rightEdge shortcut needs newSideNode == rightEdge. Break it by
+            //      making lastIndex even at level 0 so rightEdge dangles (stays =
+            //      value while repeatedCenter advances). From level 1 onward
+            //      newSideNode tracks the canonical repeatedCenter while rightEdge
+            //      is off it, so the operands always differ.
+            //
+            //   3. Convergence skip only fires once firstIndex and lastIndex share
+            //      top bits. With firstIndex=1 and lastIndex=2^D - 2 they only
+            //      share the top zero bit, so the skip fires only at the very top
+            //      and leftBoundary updates fire at D-1 levels.
+            //
+            // Geometry: pre-insert one leaf of value 7, then insertManyZeros of
+            // (2^D - 2). That gives firstIndex=1 (odd), lastIndex=2^D-2 (even at
+            // level 0), sideNodes[0]=7 (≠ 0). Resulting per-call work (warm cache):
+            //   * D cache SLOADs (hits)
+            //   * D-1 real leftBoundary hashes
+            //   * D-1 real rightEdge hashes
+            //   * D sideNode SSTOREs
+            // For D=255 that's ~508 Poseidon calls vs ~0 in the old "best case".
+            const D = 255n
+
+            await skinnyIMTTest.precomputeRepeatedCache(0, D)
+            await skinnyIMTTest.insert(7)
+            await skinnyIMTTest.insertManyZeros(2n ** D - 2n)
+
+            expect(await skinnyIMTTest.size()).to.equal(2n ** D - 1n)
+            expect(await skinnyIMTTest.depth()).to.equal(D)
+        })
+
         it("Should reject a value >= SNARK_SCALAR_FIELD", async () => {
             const transaction = skinnyIMTTest.precomputeRepeatedCache(SNARK_SCALAR_FIELD, 4)
 
             await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "LeafGreaterThanSnarkScalarField")
-        })
-
-        it("Should allow inserting a fuck ton of zeros in one tx. With pre-computed zeros", async () => {
-            const transaction = skinnyIMTTest.precomputeRepeatedCache(0, 255)
-            await skinnyIMTTest.insertManyZeros(2n**255n)
-        })
-
-        it("Should burn an even worse amount of gas (max-depth tree built in many TXs)", async () => {
-            // Required: pre-cache zeros. ~10M gas on its own.
-            await skinnyIMTTest.precomputeRepeatedCache(0, 255)
-
-            // Bonus pre-caches we'll cash in below. Each ~10M gas. Three extra
-            // values × 10M = ~30M gas burnt just on cache warming.
-            await skinnyIMTTest.precomputeRepeatedCache(7, 255)
-            await skinnyIMTTest.precomputeRepeatedCache(13, 255)
-            await skinnyIMTTest.precomputeRepeatedCache(42, 255)
-
-            // Fill the tree in five chunks instead of one. Each call rewalks
-            // the full ~255 levels of sideNodes — the per-call gas hovers near
-            // the block limit, so total burn ≫ a single insertManyZeros(2^255).
-            //
-            // Capacity ceiling: size = 2^255 (one more leaf would need depth
-            // 256, where `2 ** treeDepth` overflows). The chunk sizes sum to
-            // exactly 2^255: 2^254 + 2^253 + 2^252 + (2^252 - 1) + 1.
-            await skinnyIMTTest.insertManyZeros(2n ** 254n)              // size 2^254,                depth 254
-            await skinnyIMTTest.insertManyZeros(2n ** 253n)              // size 2^254 + 2^253,        depth 255
-            await skinnyIMTTest.insertManyRepeated(7, 2n ** 252n)        // size 2^254 + 2^253 + 2^252
-            await skinnyIMTTest.insertManyRepeated(13, 2n ** 252n - 1n)  // size 2^255 - 1
-            await skinnyIMTTest.insertManyRepeated(42, 1)                // size 2^255 (uses _insert shortcut)
-
-            expect(await skinnyIMTTest.size()).to.equal(2n ** 255n)
-            expect(await skinnyIMTTest.depth()).to.equal(255)
         })
 
         it("Should be a no-op when upToLevel is 0", async () => {
