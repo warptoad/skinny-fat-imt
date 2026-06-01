@@ -2,16 +2,16 @@ import { LeanIMT as JSLeanIMT } from "@zk-kit/lean-imt"
 import { expect } from "chai"
 import { run } from "hardhat"
 import { poseidon2 } from "poseidon-lite"
-import { SkinnyIMT, SkinnyIMTTest } from "../typechain-types"
+import { SkinnyIMTPoseidon, SkinnyIMTPoseidonTest } from "../typechain-types"
 
 describe("SkinnyIMT", () => {
     const SNARK_SCALAR_FIELD = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617")
-    let skinnyIMTTest: SkinnyIMTTest
-    let skinnyIMT: SkinnyIMT
+    let skinnyIMTTest: SkinnyIMTPoseidonTest
+    let skinnyIMT: SkinnyIMTPoseidon
     let jsLeanIMT: JSLeanIMT
 
     beforeEach(async () => {
-        const { library, contract } = await run("deploy:imt-test", { library: "SkinnyIMT", logs: false })
+        const { library, contract } = await run("deploy:imt-test", { library: "SkinnyIMTPoseidon", logs: false })
 
         skinnyIMTTest = contract
         skinnyIMT = library
@@ -331,7 +331,7 @@ describe("SkinnyIMT", () => {
             await skinnyIMTTest.insertManyRepeated(v, n)
             const warmRoot = await skinnyIMTTest.root()
 
-            const { contract: cold } = await run("deploy:imt-test", { library: "SkinnyIMT", logs: false })
+            const { contract: cold } = await run("deploy:imt-test", { library: "SkinnyIMTPoseidon", logs: false })
             await cold.insertManyRepeated(v, n)
 
             expect(warmRoot).to.equal(await cold.root())
@@ -344,10 +344,10 @@ describe("SkinnyIMT", () => {
             const v = 21n
             const n = 50
 
-            const { contract: cold } = await run("deploy:imt-test", { library: "SkinnyIMT", logs: false })
+            const { contract: cold } = await run("deploy:imt-test", { library: "SkinnyIMTPoseidon", logs: false })
             const coldTx = await (await cold.insertManyRepeated(v, n)).wait()
 
-            const { contract: warm } = await run("deploy:imt-test", { library: "SkinnyIMT", logs: false })
+            const { contract: warm } = await run("deploy:imt-test", { library: "SkinnyIMTPoseidon", logs: false })
             await warm.precomputeRepeatedCache(v, 6)
             const warmTx = await (await warm.insertManyRepeated(v, n)).wait()
 

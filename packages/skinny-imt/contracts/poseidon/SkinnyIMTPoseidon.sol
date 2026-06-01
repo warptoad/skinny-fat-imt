@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {InternalSkinnyIMT, SkinnyIMTData} from "./InternalSkinnyIMT.sol";
-import {SNARK_SCALAR_FIELD} from "./Constants.sol";
-import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
-import {IHasherT3} from "./interfaces/IHasherT3.sol";
+import {InternalSkinnyIMT, SkinnyIMTData} from "../InternalSkinnyIMT.sol";
+import {SNARK_SCALAR_FIELD} from "../Constants.sol";
+// import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
+import {IHasherT3} from "../interfaces/IHasherT3.sol";
 
 error LeafGreaterThanSnarkScalarField();
 
@@ -13,7 +13,7 @@ event UpdatedLeaf(uint256 indexed treeId, uint256 indexed index, uint256 indexed
 event RepeatedLeafs(uint256 indexed startIndex, uint256 indexed endIndex, uint256 indexed leaf);
 event NewTree(uint256 indexed treeId);
 
-library SkinnyIMT {
+library SkinnyIMTPoseidon {
     // The create2 address of poseidonT3 from: https://github.com/chancehudson/poseidon-solidity?tab=readme-ov-file#benchmark
     address internal constant HASHER_ADDRESS = 0x3333333C0A88F9BE4fd23ed0536F9B6c427e3B93;
     // The function used for hashing. Passed as a function parameter in functions from InternalLazyIMT
