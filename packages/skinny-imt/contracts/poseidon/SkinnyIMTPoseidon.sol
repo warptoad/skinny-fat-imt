@@ -17,7 +17,7 @@ library SkinnyIMTPoseidon {
     // The create2 address of poseidonT3 from: https://github.com/chancehudson/poseidon-solidity?tab=readme-ov-file#benchmark
     address internal constant HASHER_ADDRESS = 0x3333333C0A88F9BE4fd23ed0536F9B6c427e3B93;
     // The function used for hashing. Passed as a function parameter in functions from InternalLazyIMT
-    function hasher(uint256[2] memory input) internal view returns (uint256) {
+    function hasher(uint256[2] memory input) internal pure returns (uint256) {
         return IHasherT3(HASHER_ADDRESS).hash(input);
     }
 
@@ -81,13 +81,17 @@ library SkinnyIMTPoseidon {
     /// @return _root The new root after the leaves have been appended.
     /// @return _startIndex The index of the first inserted leaf.
     /// @return _endIndex The index of the last inserted leaf.
-    function insertManyRepeated(SkinnyIMTData storage self, uint256 value, uint256 amount) public returns (uint256 _root, uint256 _startIndex, uint256 _endIndex) {
+    function insertManyRepeated(
+        SkinnyIMTData storage self,
+        uint256 value,
+        uint256 amount
+    ) public returns (uint256 _root, uint256 _startIndex, uint256 _endIndex) {
         if (value >= SNARK_SCALAR_FIELD) {
             revert LeafGreaterThanSnarkScalarField();
         }
-        (_root,_startIndex,_endIndex) = InternalSkinnyIMT._insertManyRepeated(self, value, amount, hasher);
-        emit RepeatedLeafs(_startIndex, _endIndex, value );
-        return (_root,_startIndex,_endIndex);
+        (_root, _startIndex, _endIndex) = InternalSkinnyIMT._insertManyRepeated(self, value, amount, hasher);
+        emit RepeatedLeafs(_startIndex, _endIndex, value);
+        return (_root, _startIndex, _endIndex);
     }
 
     /// @dev Convenience wrapper for the common `value == 0` case.
@@ -97,10 +101,13 @@ library SkinnyIMTPoseidon {
     /// @return _root The new root after the leaves have been appended.
     /// @return _startIndex The index of the first inserted leaf.
     /// @return _endIndex The index of the last inserted leaf.
-    function insertManyZeros(SkinnyIMTData storage self, uint256 amount) public returns (uint256 _root, uint256 _startIndex, uint256 _endIndex) {
-        (_root,_startIndex,_endIndex) = InternalSkinnyIMT._insertManyRepeated(self, 0, amount, hasher);
-        emit RepeatedLeafs(_startIndex, _endIndex, 0 );
-        return (_root,_startIndex,_endIndex);
+    function insertManyZeros(
+        SkinnyIMTData storage self,
+        uint256 amount
+    ) public returns (uint256 _root, uint256 _startIndex, uint256 _endIndex) {
+        (_root, _startIndex, _endIndex) = InternalSkinnyIMT._insertManyRepeated(self, 0, amount, hasher);
+        emit RepeatedLeafs(_startIndex, _endIndex, 0);
+        return (_root, _startIndex, _endIndex);
     }
 
     /// @dev Pre-populates the repeated-subtree cache for `value` up to `upToLevel`.

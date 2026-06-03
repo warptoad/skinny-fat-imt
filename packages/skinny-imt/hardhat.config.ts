@@ -1,6 +1,7 @@
 import "@nomicfoundation/hardhat-toolbox"
 import { HardhatUserConfig } from "hardhat/config"
-import "./tasks/deploy-imt-test"
+import "./tasks/deploy-imt-poseidon-test"
+import "./tasks/deploy-imt-poseidon2-test"
 import "dotenv/config"
 
 const hardhatConfig: HardhatUserConfig = {

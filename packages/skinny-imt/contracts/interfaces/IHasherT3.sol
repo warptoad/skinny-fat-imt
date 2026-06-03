@@ -2,5 +2,5 @@
 pragma solidity ^0.8.4;
 
 interface IHasherT3 {
-    function hash(uint256[2] memory) external view returns (uint256);
+    function hash(uint256[2] memory) external pure returns (uint256);
 }

@@ -1,8 +1,10 @@
 import { LeanIMT as JSLeanIMT } from "@zk-kit/lean-imt"
 import { expect } from "chai"
 import { run } from "hardhat"
-import { poseidon2 } from "poseidon-lite"
 import { SkinnyIMTPoseidon2, SkinnyIMTPoseidon2Test } from "../typechain-types"
+// @ts-ignore - @zkpassport/poseidon2's exports map omits a "types" condition, so
+// exports-aware resolution can't find its (shipped) declarations. Types are fine at runtime.
+import { poseidon2Hash } from "@zkpassport/poseidon2"
 
 describe("SkinnyIMT", () => {
     const SNARK_SCALAR_FIELD = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617")
@@ -11,11 +13,14 @@ describe("SkinnyIMT", () => {
     let jsLeanIMT: JSLeanIMT
 
     beforeEach(async () => {
-        const { library, contract } = await run("deploy:imt-test", { library: "SkinnyIMTPoseidon2", logs: false })
+        const { library, contract } = await run("deploy:imt-poseidon2-test", {
+            library: "SkinnyIMTPoseidon2",
+            logs: false
+        })
 
         skinnyIMTTest = contract
         skinnyIMT = library
-        jsLeanIMT = new JSLeanIMT((a, b) => poseidon2([a, b]))
+        jsLeanIMT = new JSLeanIMT((a, b) => poseidon2Hash([a, b]))
     })
 
     describe("# insert", () => {
@@ -331,7 +336,10 @@ describe("SkinnyIMT", () => {
             await skinnyIMTTest.insertManyRepeated(v, n)
             const warmRoot = await skinnyIMTTest.root()
 
-            const { contract: cold } = await run("deploy:imt-test", { library: "SkinnyIMTPoseidon2", logs: false })
+            const { contract: cold } = await run("deploy:imt-poseidon2-test", {
+                library: "SkinnyIMTPoseidon2",
+                logs: false
+            })
             await cold.insertManyRepeated(v, n)
 
             expect(warmRoot).to.equal(await cold.root())
@@ -344,10 +352,16 @@ describe("SkinnyIMT", () => {
             const v = 21n
             const n = 50
 
-            const { contract: cold } = await run("deploy:imt-test", { library: "SkinnyIMTPoseidon2", logs: false })
+            const { contract: cold } = await run("deploy:imt-poseidon2-test", {
+                library: "SkinnyIMTPoseidon2",
+                logs: false
+            })
             const coldTx = await (await cold.insertManyRepeated(v, n)).wait()
 
-            const { contract: warm } = await run("deploy:imt-test", { library: "SkinnyIMTPoseidon2", logs: false })
+            const { contract: warm } = await run("deploy:imt-poseidon2-test", {
+                library: "SkinnyIMTPoseidon2",
+                logs: false
+            })
             await warm.precomputeRepeatedCache(v, 6)
             const warmTx = await (await warm.insertManyRepeated(v, n)).wait()
 

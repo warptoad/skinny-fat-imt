@@ -4,7 +4,8 @@ pragma solidity ^0.8.4;
 import {InternalSkinnyIMT, SkinnyIMTData} from "../InternalSkinnyIMT.sol";
 import {SNARK_SCALAR_FIELD} from "../Constants.sol";
 // import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
-import {IHasherT3} from "../interfaces/IHasherT3.sol";
+//import {IHasherT3} from "../interfaces/IHasherT3.sol";
+// import {IPoseidon2} from "poseidon2-evm/src/IPoseidon2.sol";
 
 error LeafGreaterThanSnarkScalarField();
 
@@ -14,11 +15,20 @@ event RepeatedLeafs(uint256 indexed startIndex, uint256 indexed endIndex, uint25
 event NewTree(uint256 indexed treeId);
 
 library SkinnyIMTPoseidon2 {
-    // The create2 address of poseidonT3 from: https://github.com/chancehudson/poseidon-solidity?tab=readme-ov-file#benchmark
-    address internal constant HASHER_ADDRESS = 0x3333333C0A88F9BE4fd23ed0536F9B6c427e3B93;
-    // The function used for hashing. Passed as a function parameter in functions from InternalLazyIMT
-    function hasher(uint256[2] memory input) internal view returns (uint256) {
-        return IHasherT3(HASHER_ADDRESS).hash(input);
+    // create2 address of our patched Poseidon2YulFixed (see contracts/poseidon2/Poseidon2YulFixed.sol).
+    // The upstream zemse Poseidon2Yul overflows 2**256 on some inputs and returns wrong hashes;
+    // this address points at the reduction-corrected copy. Deployed deterministically by
+    // deploy-imt-poseidon2-test.ts via the poseidon-solidity create2 proxy.
+    address internal constant HASHER_ADDRESS = 0x77553EFE11B53f1e882716b43bCe3530fc0a9327;
+    // The function used for hashing. Passed as a function parameter in functions from InternalLazyIMT.
+    function hasher(uint256[2] memory leaves) internal view returns (uint256) {
+        // Poseidon2YulFixed is a raw fallback() that reads tightly-packed calldata (no selector,
+        // no array header): calldatasize/32 is the input count, words read from offsets 0/0x20/0x40.
+        // So send exactly leaves[0]‖leaves[1] (64 bytes) — going through an ABI selector would
+        // shift every word and corrupt both the IV and the absorbed inputs.
+        (bool ok, bytes memory result) = HASHER_ADDRESS.staticcall(abi.encodePacked(leaves[0], leaves[1]));
+        require(ok, "poseidon2 hash failed");
+        return abi.decode(result, (uint256));
     }
 
     using InternalSkinnyIMT for *;
@@ -81,13 +91,17 @@ library SkinnyIMTPoseidon2 {
     /// @return _root The new root after the leaves have been appended.
     /// @return _startIndex The index of the first inserted leaf.
     /// @return _endIndex The index of the last inserted leaf.
-    function insertManyRepeated(SkinnyIMTData storage self, uint256 value, uint256 amount) public returns (uint256 _root, uint256 _startIndex, uint256 _endIndex) {
+    function insertManyRepeated(
+        SkinnyIMTData storage self,
+        uint256 value,
+        uint256 amount
+    ) public returns (uint256 _root, uint256 _startIndex, uint256 _endIndex) {
         if (value >= SNARK_SCALAR_FIELD) {
             revert LeafGreaterThanSnarkScalarField();
         }
-        (_root,_startIndex,_endIndex) = InternalSkinnyIMT._insertManyRepeated(self, value, amount, hasher);
-        emit RepeatedLeafs(_startIndex, _endIndex, value );
-        return (_root,_startIndex,_endIndex);
+        (_root, _startIndex, _endIndex) = InternalSkinnyIMT._insertManyRepeated(self, value, amount, hasher);
+        emit RepeatedLeafs(_startIndex, _endIndex, value);
+        return (_root, _startIndex, _endIndex);
     }
 
     /// @dev Convenience wrapper for the common `value == 0` case.
@@ -97,10 +111,13 @@ library SkinnyIMTPoseidon2 {
     /// @return _root The new root after the leaves have been appended.
     /// @return _startIndex The index of the first inserted leaf.
     /// @return _endIndex The index of the last inserted leaf.
-    function insertManyZeros(SkinnyIMTData storage self, uint256 amount) public returns (uint256 _root, uint256 _startIndex, uint256 _endIndex) {
-        (_root,_startIndex,_endIndex) = InternalSkinnyIMT._insertManyRepeated(self, 0, amount, hasher);
-        emit RepeatedLeafs(_startIndex, _endIndex, 0 );
-        return (_root,_startIndex,_endIndex);
+    function insertManyZeros(
+        SkinnyIMTData storage self,
+        uint256 amount
+    ) public returns (uint256 _root, uint256 _startIndex, uint256 _endIndex) {
+        (_root, _startIndex, _endIndex) = InternalSkinnyIMT._insertManyRepeated(self, 0, amount, hasher);
+        emit RepeatedLeafs(_startIndex, _endIndex, 0);
+        return (_root, _startIndex, _endIndex);
     }
 
     /// @dev Pre-populates the repeated-subtree cache for `value` up to `upToLevel`.
