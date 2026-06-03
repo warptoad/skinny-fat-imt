@@ -19,7 +19,7 @@ library SkinnyIMTPoseidon2 {
     // The upstream zemse Poseidon2Yul overflows 2**256 on some inputs and returns wrong hashes;
     // this address points at the reduction-corrected copy. Deployed deterministically by
     // deploy-imt-poseidon2-test.ts via the poseidon-solidity create2 proxy.
-    address internal constant HASHER_ADDRESS = 0x77553EFE11B53f1e882716b43bCe3530fc0a9327;
+    address internal constant HASHER_ADDRESS = 0xCbE6AF0A2e1033753CAE2F2850eFfe2192Cc3219;
     // The function used for hashing. Passed as a function parameter in functions from InternalLazyIMT.
     function hasher(uint256[2] memory leaves) internal view returns (uint256) {
         // Poseidon2YulFixed is a raw fallback() that reads tightly-packed calldata (no selector,
