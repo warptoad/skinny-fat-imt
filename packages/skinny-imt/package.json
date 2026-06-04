@@ -39,6 +39,6 @@
     "dependencies": {
         "@zkpassport/poseidon2": "^0.6.2",
         "poseidon-solidity": "0.0.5",
-        "poseidon2-evm": "^1.0.0"
+        "poseidon2-evm": "2.0.0"
     }
 }

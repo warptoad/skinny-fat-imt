@@ -13,22 +13,20 @@ event NewLeaf(uint256 indexed treeId, uint256 startIndex, uint256 leaves);
 event UpdatedLeaf(uint256 indexed treeId, uint256 indexed index, uint256 indexed leaf);
 event RepeatedLeafs(uint256 indexed startIndex, uint256 indexed endIndex, uint256 indexed leaf);
 event NewTree(uint256 indexed treeId);
+import {IPoseidon2} from "poseidon2-evm/src/IPoseidon2.sol";
 
 library SkinnyIMTPoseidon2 {
     // create2 address of our patched Poseidon2YulFixed (see contracts/poseidon2/Poseidon2YulFixed.sol).
     // The upstream zemse Poseidon2Yul overflows 2**256 on some inputs and returns wrong hashes;
     // this address points at the reduction-corrected copy. Deployed deterministically by
     // deploy-imt-poseidon2-test.ts via the poseidon-solidity create2 proxy.
-    address internal constant HASHER_ADDRESS = 0xCbE6AF0A2e1033753CAE2F2850eFfe2192Cc3219;
+    address internal constant HASHER_ADDRESS = 0xB2542195Ad96AcfBC962C48A97D7640A9F5386D2;
     // The function used for hashing. Passed as a function parameter in functions from InternalLazyIMT.
-    function hasher(uint256[2] memory leaves) internal view returns (uint256) {
-        // Poseidon2YulFixed is a raw fallback() that reads tightly-packed calldata (no selector,
-        // no array header): calldatasize/32 is the input count, words read from offsets 0/0x20/0x40.
-        // So send exactly leaves[0]‖leaves[1] (64 bytes) — going through an ABI selector would
-        // shift every word and corrupt both the IV and the absorbed inputs.
-        (bool ok, bytes memory result) = HASHER_ADDRESS.staticcall(abi.encodePacked(leaves[0], leaves[1]));
-        require(ok, "poseidon2 hash failed");
-        return abi.decode(result, (uint256));
+    function hasher(uint256[2] memory leaves) internal pure returns (uint256) {
+        return IPoseidon2(HASHER_ADDRESS).hash_2(leaves[0], leaves[1]);
+        // (bool ok, bytes memory result) = HASHER_ADDRESS.staticcall(abi.encodePacked(leaves[0], leaves[1]));
+        // require(ok, "poseidon2 hash failed");
+        // return abi.decode(result, (uint256));
     }
 
     using InternalSkinnyIMT for *;
