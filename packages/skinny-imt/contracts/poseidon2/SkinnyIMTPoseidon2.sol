@@ -2,18 +2,12 @@
 pragma solidity ^0.8.4;
 
 import {InternalSkinnyIMT, SkinnyIMTData} from "../InternalSkinnyIMT.sol";
-import {SNARK_SCALAR_FIELD} from "../Constants.sol";
-// import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
-//import {IHasherT3} from "../interfaces/IHasherT3.sol";
-// import {IPoseidon2} from "poseidon2-evm/src/IPoseidon2.sol";
-
-error LeafGreaterThanSnarkScalarField();
+import {IPoseidon2} from "poseidon2-evm/src/IPoseidon2.sol";
 
 event NewLeaf(uint256 indexed treeId, uint256 startIndex, uint256 leaves);
 event UpdatedLeaf(uint256 indexed treeId, uint256 indexed index, uint256 indexed leaf);
 event RepeatedLeafs(uint256 indexed startIndex, uint256 indexed endIndex, uint256 indexed leaf);
 event NewTree(uint256 indexed treeId);
-import {IPoseidon2} from "poseidon2-evm/src/IPoseidon2.sol";
 
 library SkinnyIMTPoseidon2 {
     // create2 address of our patched Poseidon2YulFixed (see contracts/poseidon2/Poseidon2YulFixed.sol).
@@ -24,9 +18,6 @@ library SkinnyIMTPoseidon2 {
     // The function used for hashing. Passed as a function parameter in functions from InternalLazyIMT.
     function hasher(uint256[2] memory leaves) internal pure returns (uint256) {
         return IPoseidon2(HASHER_ADDRESS).hash_2(leaves[0], leaves[1]);
-        // (bool ok, bytes memory result) = HASHER_ADDRESS.staticcall(abi.encodePacked(leaves[0], leaves[1]));
-        // require(ok, "poseidon2 hash failed");
-        // return abi.decode(result, (uint256));
     }
 
     using InternalSkinnyIMT for *;
@@ -45,10 +36,7 @@ library SkinnyIMTPoseidon2 {
     /// @return The new hash of the node after the leaf has been inserted.
     /// @notice Checks that the leaf are within the snark scalar field
     function insert(SkinnyIMTData storage self, uint256 leaf) public returns (uint256) {
-        if (leaf >= SNARK_SCALAR_FIELD) {
-            revert LeafGreaterThanSnarkScalarField();
-        }
-
+        InternalSkinnyIMT._requireInField(leaf);
         return InternalSkinnyIMT._insert(self, leaf, hasher);
     }
 
@@ -63,9 +51,7 @@ library SkinnyIMTPoseidon2 {
         uint256 treeId = self.treeId;
         for (uint256 i = 0; i < leaves.length; ) {
             uint256 leaf = leaves[i];
-            if (leaf >= SNARK_SCALAR_FIELD) {
-                revert LeafGreaterThanSnarkScalarField();
-            }
+            InternalSkinnyIMT._requireInField(leaf);
             emit NewLeaf(treeId, treeSize + i, leaf);
 
             unchecked {
@@ -94,9 +80,7 @@ library SkinnyIMTPoseidon2 {
         uint256 value,
         uint256 amount
     ) public returns (uint256 _root, uint256 _startIndex, uint256 _endIndex) {
-        if (value >= SNARK_SCALAR_FIELD) {
-            revert LeafGreaterThanSnarkScalarField();
-        }
+        InternalSkinnyIMT._requireInField(value);
         (_root, _startIndex, _endIndex) = InternalSkinnyIMT._insertManyRepeated(self, value, amount, hasher);
         emit RepeatedLeafs(_startIndex, _endIndex, value);
         return (_root, _startIndex, _endIndex);
@@ -126,9 +110,7 @@ library SkinnyIMTPoseidon2 {
     /// @param value: The leaf value whose repeated-subtree chain to precompute.
     /// @param upToLevel: The highest level (inclusive) to populate the cache for.
     function precomputeRepeatedCache(SkinnyIMTData storage self, uint256 value, uint256 upToLevel) public {
-        if (value >= SNARK_SCALAR_FIELD) {
-            revert LeafGreaterThanSnarkScalarField();
-        }
+        InternalSkinnyIMT._requireInField(value);
         InternalSkinnyIMT._precomputeRepeatedCache(self, value, upToLevel, hasher);
     }
 
@@ -150,14 +132,10 @@ library SkinnyIMTPoseidon2 {
         uint256 index,
         uint256[] calldata siblingNodes
     ) public returns (uint256) {
-        if (newLeaf >= SNARK_SCALAR_FIELD) {
-            revert LeafGreaterThanSnarkScalarField();
-        }
+        InternalSkinnyIMT._requireInField(newLeaf);
         // @todo what actually breaks if that is not checked? Maybe not checking siblingNodes is fine?
         for (uint256 i = 0; i < siblingNodes.length; i++) {
-            if (siblingNodes[i] >= SNARK_SCALAR_FIELD) {
-                revert LeafGreaterThanSnarkScalarField();
-            }
+            InternalSkinnyIMT._requireInField(siblingNodes[i]);
         }
         return InternalSkinnyIMT._update(self, oldLeaf, newLeaf, index, siblingNodes, hasher);
     }
@@ -175,13 +153,9 @@ library SkinnyIMTPoseidon2 {
         uint256 index,
         uint256[] calldata siblingNodes
     ) public view returns (bool) {
-        if (leaf >= SNARK_SCALAR_FIELD) {
-            revert LeafGreaterThanSnarkScalarField();
-        }
+        InternalSkinnyIMT._requireInField(leaf);
         for (uint256 i = 0; i < siblingNodes.length; i++) {
-            if (siblingNodes[i] >= SNARK_SCALAR_FIELD) {
-                revert LeafGreaterThanSnarkScalarField();
-            }
+            InternalSkinnyIMT._requireInField(siblingNodes[i]);
         }
         return InternalSkinnyIMT._verify(self, leaf, index, siblingNodes, hasher);
     }

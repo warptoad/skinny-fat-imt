@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
+import {SNARK_SCALAR_FIELD} from "./Constants.sol";
+
 // TODO optimize duplicate inserts by adding hashed from 0 level nodes
 struct SkinnyIMTData {
     // Tracks the current number of leaves in the tree.
@@ -30,6 +32,7 @@ error WrongSiblingNodes();
 error LeafDoesNotExist();
 error NotInitialized();
 error AlreadyInitialized();
+error LeafGreaterThanSnarkScalarField();
 
 /// @title Skinny Incremental binary Merkle tree.
 /// @dev The SkinnyIMT is an optimized version of the BinaryIMT.
@@ -44,6 +47,13 @@ library InternalSkinnyIMT {
     /// @return True if the tree has been initialized, false otherwise.
     function _isInitialized(SkinnyIMTData storage self) internal view returns (bool) {
         return self.treeId != 0;
+    }
+
+    /// @dev Reverts with `LeafGreaterThanSnarkScalarField` if `v` is not in the BN254 scalar field.
+    function _requireInField(uint256 v) internal pure {
+        if (v >= SNARK_SCALAR_FIELD) {
+            revert LeafGreaterThanSnarkScalarField();
+        }
     }
 
     /// @dev Initializes the tree by assigning it a non-zero `treeId` derived from its storage slot.

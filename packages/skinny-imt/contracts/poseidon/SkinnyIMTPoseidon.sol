@@ -2,11 +2,8 @@
 pragma solidity ^0.8.4;
 
 import {InternalSkinnyIMT, SkinnyIMTData} from "../InternalSkinnyIMT.sol";
-import {SNARK_SCALAR_FIELD} from "../Constants.sol";
 // import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
 import {IHasherT3} from "../interfaces/IHasherT3.sol";
-
-error LeafGreaterThanSnarkScalarField();
 
 event NewLeaf(uint256 indexed treeId, uint256 startIndex, uint256 leaves);
 event UpdatedLeaf(uint256 indexed treeId, uint256 indexed index, uint256 indexed leaf);
@@ -37,10 +34,7 @@ library SkinnyIMTPoseidon {
     /// @return The new hash of the node after the leaf has been inserted.
     /// @notice Checks that the leaf are within the snark scalar field
     function insert(SkinnyIMTData storage self, uint256 leaf) public returns (uint256) {
-        if (leaf >= SNARK_SCALAR_FIELD) {
-            revert LeafGreaterThanSnarkScalarField();
-        }
-
+        InternalSkinnyIMT._requireInField(leaf);
         return InternalSkinnyIMT._insert(self, leaf, hasher);
     }
 
@@ -55,9 +49,7 @@ library SkinnyIMTPoseidon {
         uint256 treeId = self.treeId;
         for (uint256 i = 0; i < leaves.length; ) {
             uint256 leaf = leaves[i];
-            if (leaf >= SNARK_SCALAR_FIELD) {
-                revert LeafGreaterThanSnarkScalarField();
-            }
+            InternalSkinnyIMT._requireInField(leaf);
             emit NewLeaf(treeId, treeSize + i, leaf);
 
             unchecked {
@@ -86,9 +78,7 @@ library SkinnyIMTPoseidon {
         uint256 value,
         uint256 amount
     ) public returns (uint256 _root, uint256 _startIndex, uint256 _endIndex) {
-        if (value >= SNARK_SCALAR_FIELD) {
-            revert LeafGreaterThanSnarkScalarField();
-        }
+        InternalSkinnyIMT._requireInField(value);
         (_root, _startIndex, _endIndex) = InternalSkinnyIMT._insertManyRepeated(self, value, amount, hasher);
         emit RepeatedLeafs(_startIndex, _endIndex, value);
         return (_root, _startIndex, _endIndex);
@@ -118,9 +108,7 @@ library SkinnyIMTPoseidon {
     /// @param value: The leaf value whose repeated-subtree chain to precompute.
     /// @param upToLevel: The highest level (inclusive) to populate the cache for.
     function precomputeRepeatedCache(SkinnyIMTData storage self, uint256 value, uint256 upToLevel) public {
-        if (value >= SNARK_SCALAR_FIELD) {
-            revert LeafGreaterThanSnarkScalarField();
-        }
+        InternalSkinnyIMT._requireInField(value);
         InternalSkinnyIMT._precomputeRepeatedCache(self, value, upToLevel, hasher);
     }
 
@@ -142,14 +130,10 @@ library SkinnyIMTPoseidon {
         uint256 index,
         uint256[] calldata siblingNodes
     ) public returns (uint256) {
-        if (newLeaf >= SNARK_SCALAR_FIELD) {
-            revert LeafGreaterThanSnarkScalarField();
-        }
+        InternalSkinnyIMT._requireInField(newLeaf);
         // @todo what actually breaks if that is not checked? Maybe not checking siblingNodes is fine?
         for (uint256 i = 0; i < siblingNodes.length; i++) {
-            if (siblingNodes[i] >= SNARK_SCALAR_FIELD) {
-                revert LeafGreaterThanSnarkScalarField();
-            }
+            InternalSkinnyIMT._requireInField(siblingNodes[i]);
         }
         return InternalSkinnyIMT._update(self, oldLeaf, newLeaf, index, siblingNodes, hasher);
     }
@@ -167,13 +151,9 @@ library SkinnyIMTPoseidon {
         uint256 index,
         uint256[] calldata siblingNodes
     ) public view returns (bool) {
-        if (leaf >= SNARK_SCALAR_FIELD) {
-            revert LeafGreaterThanSnarkScalarField();
-        }
+        InternalSkinnyIMT._requireInField(leaf);
         for (uint256 i = 0; i < siblingNodes.length; i++) {
-            if (siblingNodes[i] >= SNARK_SCALAR_FIELD) {
-                revert LeafGreaterThanSnarkScalarField();
-            }
+            InternalSkinnyIMT._requireInField(siblingNodes[i]);
         }
         return InternalSkinnyIMT._verify(self, leaf, index, siblingNodes, hasher);
     }
