@@ -2,7 +2,8 @@
 pragma solidity ^0.8.4;
 
 import {InternalSkinnyIMT, SkinnyIMTData} from "../InternalSkinnyIMT.sol";
-import {IPoseidon2} from "poseidon2-evm/src/IPoseidon2.sol";
+// import {IPoseidon2} from "poseidon2-evm/src/IPoseidon2.sol";
+import {LibPoseidon2Yul} from "poseidon2-evm/src/bn254/yul/LibPoseidon2Yul.sol";
 
 event NewLeaf(uint256 indexed treeId, uint256 startIndex, uint256 leaves);
 event UpdatedLeaf(uint256 indexed treeId, uint256 indexed index, uint256 indexed leaf);
@@ -10,14 +11,18 @@ event RepeatedLeafs(uint256 indexed startIndex, uint256 indexed endIndex, uint25
 event NewTree(uint256 indexed treeId);
 
 library SkinnyIMTPoseidon2 {
-    // create2 address of our patched Poseidon2YulFixed (see contracts/poseidon2/Poseidon2YulFixed.sol).
-    // The upstream zemse Poseidon2Yul overflows 2**256 on some inputs and returns wrong hashes;
-    // this address points at the reduction-corrected copy. Deployed deterministically by
-    // deploy-imt-poseidon2-test.ts via the poseidon-solidity create2 proxy.
-    address internal constant HASHER_ADDRESS = 0xB2542195Ad96AcfBC962C48A97D7640A9F5386D2;
+    // @TODO ask zemse if the wants to make Poseidon2Yul_BN254 an library with public functions, would add 50~150 gas
+    // Hardcoded since poseidon2 is deployed as a contract instead of a library
+    // This is because author used a gas saving trick with .fallback
+    // address internal constant HASHER_ADDRESS = 0xB2542195Ad96AcfBC962C48A97D7640A9F5386D2;
+    // The function used for hashing. Passed as a function parameter in functions from InternalLazyIMT.
+    // function hasher(uint256[2] memory leaves) internal pure returns (uint256) {
+    //     return IPoseidon2(HASHER_ADDRESS).hash_2(leaves[0], leaves[1]);
+    // }
+
     // The function used for hashing. Passed as a function parameter in functions from InternalLazyIMT.
     function hasher(uint256[2] memory leaves) internal pure returns (uint256) {
-        return IPoseidon2(HASHER_ADDRESS).hash_2(leaves[0], leaves[1]);
+        return LibPoseidon2Yul.hash_2(leaves[0], leaves[1]);
     }
 
     using InternalSkinnyIMT for *;

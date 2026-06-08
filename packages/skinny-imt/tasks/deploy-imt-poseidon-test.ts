@@ -52,7 +52,9 @@ task("deploy:imt-poseidon-test", "Deploy an IMT contract for testing a library")
         }
 
         const LibraryFactory = (await ethers.getContractFactory(libraryName, {
-            libraries: {}
+            libraries: {
+                [`PoseidonT${arity + 1}`]: poseidonAddress
+            }
         })) as SkinnyIMTPoseidon__factory
 
         const library = await LibraryFactory.deploy()

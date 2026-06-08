@@ -2,7 +2,7 @@
 pragma solidity ^0.8.4;
 
 import {InternalSkinnyIMT, SkinnyIMTData} from "../InternalSkinnyIMT.sol";
-// import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
+import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
 import {IHasherT3} from "../interfaces/IHasherT3.sol";
 
 event NewLeaf(uint256 indexed treeId, uint256 startIndex, uint256 leaves);
@@ -11,11 +11,9 @@ event RepeatedLeafs(uint256 indexed startIndex, uint256 indexed endIndex, uint25
 event NewTree(uint256 indexed treeId);
 
 library SkinnyIMTPoseidon {
-    // The create2 address of poseidonT3 from: https://github.com/chancehudson/poseidon-solidity?tab=readme-ov-file#benchmark
-    address internal constant HASHER_ADDRESS = 0x3333333C0A88F9BE4fd23ed0536F9B6c427e3B93;
     // The function used for hashing. Passed as a function parameter in functions from InternalLazyIMT
     function hasher(uint256[2] memory input) internal pure returns (uint256) {
-        return IHasherT3(HASHER_ADDRESS).hash(input);
+        return PoseidonT3.hash(input);
     }
 
     using InternalSkinnyIMT for *;
