@@ -9,9 +9,8 @@ struct FatIMTData {
     uint256 size;
     // Represents the current depth of the tree, which can increase as new leaves are inserted.
     uint256 depth;
-    // A mapping from each level of the tree to the node value of the last even position at that level.
-    // Used for efficient inserts, updates and root calculations.
-    mapping(uint256 => uint256) sideNodes;
+    // A mapping of each node in the tree per level (nodes[level][index])
+    mapping(uint256 => mapping(uint256 => uint256)) nodes;
     //@TODO use since it can be retrieved extremely fast with debug_storageRangeAt
     //uint256[] public leaves;
     uint256 treeId;
@@ -28,7 +27,6 @@ struct FatIMTData {
     mapping(uint256 => uint256) repeatedHashCache;
 }
 
-error WrongSiblingNodes();
 error LeafDoesNotExist();
 error NotInitialized();
 error AlreadyInitialized();
@@ -104,14 +102,13 @@ library InternalFatIMT {
         uint256 node = leaf;
 
         for (uint256 level = 0; level < treeDepth; ) {
-            if ((index >> level) & 1 == 1) {
+            uint256 indexAtLevel = index >> level;
+            self.nodes[level][indexAtLevel] = node;
+            if (indexAtLevel & 1 == 1) {
                 // hash right
-                node = hasher([self.sideNodes[level], node]);
+                node = hasher([self.nodes[level][indexAtLevel - 1], node]);
             } else {
                 // leave to dangle:
-                // node is used in next iter, becomes it's own parent.
-                // Stored in sideNodes, for when it will have an right sibling eventually
-                self.sideNodes[level] = node;
             }
 
             unchecked {
@@ -119,11 +116,26 @@ library InternalFatIMT {
             }
         }
 
-        self.sideNodes[treeDepth] = node;
+        self.nodes[treeDepth][0] = node;
         // original did self.size = index++ above
         // since self.leaves[leaf] = index + 1. But that is no longer true
         self.size = index + 1;
         return node;
+    }
+
+    /// @dev Storage index of the side node at `level` for a tree whose last
+    /// leaf sits at `lastIndex`. The side node is always a left child, so we
+    /// take the last leaf's position at this level and, if it landed on a right
+    /// child (odd position), step one to the left to its sibling — leaving an
+    /// even (left-child) position. Every writer must store the edge node at this
+    /// slot and every reader must read it from here, so they stay in sync.
+    /// @param leafIndex: The index of the rightmost leaf in the tree.
+    /// @param level: The level to compute the side node index for.
+    /// @return The index of the side node within `nodes[level]`.
+    function _getSiblingIndex(uint256 leafIndex, uint256 level) private pure returns (uint256) {
+        uint256 position = leafIndex >> level;
+        // round down to the nearest left child (even position)
+        return position - (position & 1);
     }
 
     /// @dev Inserts many leaves into the incremental merkle tree.
@@ -172,6 +184,13 @@ library InternalFatIMT {
         uint256 nextLevelSize = ((currentLevelSize - 1) >> 1) + 1;
 
         for (uint256 level = 0; level < treeDepth; ) {
+            for (uint256 k = 0; k < currentLevelNewNodes.length; ) {
+                self.nodes[level][currentLevelStartIndex + k] = currentLevelNewNodes[k];
+                unchecked {
+                    ++k;
+                }
+            }
+
             // The number of nodes for the new level that will be created,
             // only the new values, not the entire level.
             // uint256 numberOfNewNodes = nextLevelSize - nextLevelStartIndex;
@@ -182,7 +201,7 @@ library InternalFatIMT {
 
                 // Assign the left node using the saved path or the position in the array.
                 if ((i + nextLevelStartIndex) * 2 < currentLevelStartIndex) {
-                    hasherInput[0] = self.sideNodes[level];
+                    hasherInput[0] = self.nodes[level][currentLevelStartIndex - 1];
                 } else {
                     hasherInput[0] = currentLevelNewNodes[(i + nextLevelStartIndex) * 2 - currentLevelStartIndex];
                 }
@@ -205,23 +224,6 @@ library InternalFatIMT {
                 unchecked {
                     ++i;
                 }
-            }
-
-            // Update the `sideNodes` variable.
-            // sideNodes are always at the edge of the tree, and are always the leftChild
-            //
-            // If `currentLevelSize` is odd, the saved value will be the last value of the array
-            // if it is even and there are more than 1 element in `currentLevelNewNodes`, the saved value
-            // will be the value before the last one.
-            // If it is even and there is only one element, there is no need to save anything because
-            // the correct value for this level was already saved before.
-            if (currentLevelSize & 1 == 1) {
-                // currentLevelSize % 2 == 1, is odd
-                // currentLevelSize = treeSize + leaves.length
-                // currentLevelSize = (currentLevelSize - 1) / 2 + 1
-                self.sideNodes[level] = currentLevelNewNodes[currentLevelNewNodes.length - 1];
-            } else if (currentLevelNewNodes.length > 1) {
-                self.sideNodes[level] = currentLevelNewNodes[currentLevelNewNodes.length - 2];
             }
 
             currentLevelStartIndex = nextLevelStartIndex;
@@ -247,7 +249,8 @@ library InternalFatIMT {
         // Update tree size
         self.size = treeSize + leaves.length;
 
-        self.sideNodes[treeDepth] = currentLevelNewNodes[0];
+        // store root
+        self.nodes[treeDepth][0] = currentLevelNewNodes[0];
 
         return currentLevelNewNodes[0];
     }
@@ -277,6 +280,8 @@ library InternalFatIMT {
     /// @dev Appends `amount` leaves all equal to `value` into the tree.
     /// @notice Worst case costs 3*newDepth hashes regardless of `amount`.
     /// Best case cost 1*newDepth
+    /// @notice Hash count is O(newDepth), but storage is O(amount): every node in the
+    /// inserted range is written — inherent to a tree that stores all nodes, not just side nodes.
     ///
     /// Only hashes 3 paths:
     ///  repeatedCenterNode: in the center of the insert,
@@ -349,7 +354,10 @@ library InternalFatIMT {
         // 1 hash / cache lookup for the node that only contains zeros (repeatedCenterNode)
         for (uint256 level = 0; level < newTreeDepth; ) {
             // ------------assign sideNode --------------
-            uint256 oldSideNode = self.sideNodes[level];
+            // Read the existing tree's side node at this level. It lives at the
+            // old tree's edge slot, derived from the old last index
+            // (firstIndex - 1). An empty old tree has no side node yet.
+            uint256 oldSideNode = firstIndex == 0 ? 0 : self.nodes[level][_getSiblingIndex(firstIndex - 1, level)];
             uint256 newSideNode;
             {
                 // calculate the current index of the most left and right node of the insert
@@ -391,9 +399,17 @@ library InternalFatIMT {
                 }
             }
 
-            // something happened, store it!
-            if (newSideNode != oldSideNode) {
-                self.sideNodes[level] = newSideNode;
+            // store nodes
+            {
+                self.nodes[level][firstIndex >> level] = leftBoundaryNode;
+                for (
+                    uint256 centerIndex = (firstIndex >> level) + 1;
+                    centerIndex < (lastIndex >> level);
+                    centerIndex++
+                ) {
+                    self.nodes[level][centerIndex] = repeatedCenterNode;
+                }
+                self.nodes[level][lastIndex >> level] = rightEdgeNode;
             }
 
             //-------- hashing -----------------
@@ -408,8 +424,8 @@ library InternalFatIMT {
                 {
                     // redoing calculation here because of stack limits
                     // uint256 leftBoundaryPosition = firstIndex >> level; over stack limit again :/
-                    uint256 nextRightEdgePosition = lastIndex >> (level + 1);
                     uint256 nextLeftEdgePosition = firstIndex >> (level + 1);
+                    uint256 nextRightEdgePosition = lastIndex >> (level + 1);
 
                     // we can skip leftBoundaryNode if the next iter rightEdgeNode is at the same position
                     // at that point leftBoundaryNode does the same as rightEdgeNode,
@@ -482,7 +498,7 @@ library InternalFatIMT {
 
         // finally store the root!
         root = rightEdgeNode;
-        self.sideNodes[newTreeDepth] = root;
+        self.nodes[newTreeDepth][0] = root;
         return (root, firstIndex, lastIndex);
     }
 
@@ -522,80 +538,55 @@ library InternalFatIMT {
     }
 
     /// @dev Updates the value of an existing leaf and recalculates hashes
-    /// to maintain tree integrity.
+    /// to maintain tree integrity. Sibling nodes are read directly from the
+    /// stored tree (`self.nodes`), so no merkle proof needs to be supplied.
     /// @param self: A storage reference to the 'FatIMTData' struct.
-    /// @param oldLeaf: The value of the leaf that is to be updated.
-    /// @param newLeaf: The new value that will replace the oldLeaf in the tree.
+    /// @param newLeaf: The new value that will replace the leaf at `index`.
     /// @param index: The index of the leaf to be updated.
-    /// @param siblingNodes: An array of sibling nodes that are necessary to recalculate the path to the root.
     /// @return The new hash of the updated node after the leaf has been updated.
-    /// @notice Requires collision-resistant hashing: `if (self.sideNodes[level] == oldRoot)` identifies
-    /// which sideNode to refresh by hash equality,
-    /// so a collision between two distinct subtree roots would corrupt tree state silently.
-    /// @notice Contracts using this function with snark based hash functions,
-    /// need to check that the old and newLeaf and siblingNodes are within the snark scalar field.
+    /// @notice Contracts using this function with snark based hash functions
+    /// need to check that the newLeaf is within the snark scalar field.
     function _update(
         FatIMTData storage self,
-        uint256 oldLeaf,
         uint256 newLeaf,
         uint256 index,
-        uint256[] calldata siblingNodes,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
         if (_isInitialized(self) == false) {
             revert NotInitialized();
         }
-        // Cache tree depth to optimize gas
-        uint256 treeDepth = self.depth;
-        if (siblingNodes.length > treeDepth) {
-            revert WrongSiblingNodes();
+        // Reverts on an empty tree too: when size == 0 every index is out of range.
+        if (index >= self.size) {
+            revert LeafDoesNotExist();
         }
-
-        // 2 vars to store intermediate hashes, to hash up to oldRoot and newRoot
-        uint256 node = newLeaf;
-        uint256 oldRoot = oldLeaf;
-
         uint256 lastIndex = self.size - 1;
 
-        uint256 i = 0;
+        // Cache tree depth to optimize gas
+        uint256 treeDepth = self.depth;
 
-        // verify merkle proof of oldLeaf from siblingNodes
-        // and at the same time calculate the newRoot
+        // intermediate hash, carried up the tree to compute the new root
+        uint256 node = newLeaf;
+
         for (uint256 level = 0; level < treeDepth; ) {
-            if ((index >> level) & 1 == 1) {
-                node = hasher([siblingNodes[i], node]);
-                oldRoot = hasher([siblingNodes[i], oldRoot]);
-
-                unchecked {
-                    ++i;
-                }
-            } else {
-                if (index >> level != lastIndex >> level) {
-                    if (self.sideNodes[level] == oldRoot) {
-                        self.sideNodes[level] = node;
-                    }
-
-                    node = hasher([node, siblingNodes[i]]);
-                    oldRoot = hasher([oldRoot, siblingNodes[i]]);
-
-                    unchecked {
-                        ++i;
-                    }
-                } else {
-                    self.sideNodes[level] = node;
-                }
+            uint256 levelIndex = index >> level;
+            self.nodes[level][levelIndex] = node;
+            if (levelIndex & 1 == 1) {
+                // right child: hash with the stored left sibling
+                node = hasher([self.nodes[level][levelIndex - 1], node]);
+            } else if (levelIndex != lastIndex >> level) {
+                // left child with a right sibling: hash with the stored right sibling
+                node = hasher([node, self.nodes[level][levelIndex + 1]]);
             }
+            // else: rightmost dangling node — carries up unchanged and is already
+            // persisted by the store above.
 
             unchecked {
                 ++level;
             }
         }
 
-        if (oldRoot != _root(self)) {
-            revert WrongSiblingNodes();
-        }
-
-        self.sideNodes[treeDepth] = node;
+        // store root
+        self.nodes[treeDepth][0] = node;
 
         //self.leaves[index] = newLeaf;
 
@@ -662,11 +653,11 @@ library InternalFatIMT {
         return rootSiblings == _root(self);
     }
 
-    /// @dev Retrieves the root of the tree from the 'sideNodes' mapping using the
+    /// @dev Retrieves the root of the tree from the node storage using the
     /// current tree depth.
     /// @param self: A storage reference to the 'FatIMTData' struct.
     /// @return The root hash of the tree.
     function _root(FatIMTData storage self) internal view returns (uint256) {
-        return self.sideNodes[self.depth];
+        return self.nodes[self.depth][0];
     }
 }

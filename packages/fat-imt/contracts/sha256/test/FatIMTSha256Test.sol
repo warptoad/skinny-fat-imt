@@ -39,8 +39,8 @@ contract FatIMTSha256Test {
         return data.depth;
     }
 
-    function update(uint256 oldLeaf, uint256 newLeaf, uint256 index, uint256[] calldata siblingNodes) external {
-        FatIMTSha256.update(data, oldLeaf, newLeaf, index, siblingNodes);
+    function update(uint256 newLeaf, uint256 index) external {
+        FatIMTSha256.update(data, newLeaf, index);
     }
 
     function verify(uint256 leaf, uint256 index, uint256[] calldata siblingsNodes) external view returns (bool) {
