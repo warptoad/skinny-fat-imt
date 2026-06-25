@@ -161,4 +161,26 @@ library FatIMTPoseidon {
     function root(FatIMTData storage self) public view returns (uint256) {
         return InternalFatIMT._root(self);
     }
+
+    // @TODO debug_storageRangeAt is not supported here since FatIMT stores leafs in a mapping
+    // do benchmarking if it is worth it to even do that.
+    /// @dev Retrieve leaves directly from storage instead of events
+    /// @notice Ethereum clients are moving towards only storing events for up to one year. This allows these full nodes
+    /// to still get these nodes when those events are not available to them
+    /// @param self: A storage reference to the 'FatIMTData' struct.
+    /// @param firstIndex: what index to start reading leafs from. (inclusive)
+    /// @param lastIndex: what index to stop reading leafs at. (*non*inclusive)
+    /// @return leafs in an array. from firstIndex to lastIndex. Including both the leaf at first and last index
+    function leafs(
+        FatIMTData storage self,
+        uint256 firstIndex,
+        uint256 lastIndex
+    ) public view returns (uint256[] memory) {
+        uint256 amountOfLeafs = lastIndex - firstIndex;
+        uint256[] memory result = new uint256[](amountOfLeafs);
+        for (uint256 i = 0; i < amountOfLeafs; i++) {
+            result[i] = self.nodes[0][firstIndex + i];
+        }
+        return result;
+    }
 }

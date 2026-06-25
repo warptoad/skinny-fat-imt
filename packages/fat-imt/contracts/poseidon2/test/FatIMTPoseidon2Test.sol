@@ -39,6 +39,10 @@ contract FatIMTPoseidon2Test {
         return data.depth;
     }
 
+    function leafs(uint256 firstIndex, uint256 lastIndex) external view returns (uint256[] memory) {
+        return FatIMTPoseidon2.leafs(data, firstIndex, lastIndex);
+    }
+
     function update(uint256 newLeaf, uint256 index) external {
         FatIMTPoseidon2.update(data, newLeaf, index);
     }
