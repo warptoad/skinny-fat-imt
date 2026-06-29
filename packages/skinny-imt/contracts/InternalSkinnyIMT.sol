@@ -28,6 +28,14 @@ struct SkinnyIMTData {
     mapping(uint256 => uint256) repeatedHashCache;
 }
 
+// added storage of the leaves to allow syncing with full nodes for leaves older then 1 year
+struct SkinnyIMTFullNodeData {
+    // arrays cost more but store in consecutive slots which allows for usage of debug_storageRangeAt
+    // to read this extremely fast
+    uint256[] leaves;
+    SkinnyIMTData skinnyData;
+}
+
 error WrongSiblingNodes();
 error LeafDoesNotExist();
 error NotInitialized();
@@ -78,12 +86,12 @@ library InternalSkinnyIMT {
     // need to check that the leaf is within the snark scalar field.
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @param leaf: The value of the new leaf to be inserted into the tree.
-    /// @return The new hash of the node after the leaf has been inserted.
+    /// @return root, index
     function _insert(
         SkinnyIMTData storage self,
         uint256 leaf,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal returns (uint256) {
+    ) internal returns (uint256, uint256) {
         if (_isInitialized(self) == false) {
             revert NotInitialized();
         }
@@ -123,9 +131,10 @@ library InternalSkinnyIMT {
         // original did self.size = index++ above
         // since self.leaves[leaf] = index + 1. But that is no longer true
         self.size = index + 1;
-        return node;
+        return (node, index);
     }
 
+    // @TODO should also return start and endIndex, but stack limit is too close for that rn
     /// @dev Inserts many leaves into the incremental merkle tree.
     /// @notice Contracts using this function with snark based hash functions,
     // need to check that the leafs are within the snark scalar field.
@@ -141,7 +150,7 @@ library InternalSkinnyIMT {
             revert NotInitialized();
         }
         // cache treeSize
-        uint256 treeSize = self.size;
+        uint256 oldTreeSize = self.size;
 
         // Array to save the nodes that will be used to create the next level of the tree.
         uint256[] memory currentLevelNewNodes;
@@ -154,16 +163,16 @@ library InternalSkinnyIMT {
         // Calculate the depth of the tree after adding the new values.
         // Unlike the 'insert' function, we need a while here as
         // N insertions can increase the tree's depth more than once.
-        while (2 ** treeDepth < treeSize + leaves.length) {
+        while (2 ** treeDepth < oldTreeSize + leaves.length) {
             ++treeDepth;
         }
         self.depth = treeDepth;
 
         // First index to change in every level.
-        uint256 currentLevelStartIndex = treeSize;
+        uint256 currentLevelStartIndex = oldTreeSize;
 
         // Size of the level used to create the next level.
-        uint256 currentLevelSize = treeSize + leaves.length;
+        uint256 currentLevelSize = oldTreeSize + leaves.length;
 
         // The index where changes begin at the next level. currentLevelStartIndex / 2
         uint256 nextLevelStartIndex = currentLevelStartIndex >> 1;
@@ -245,7 +254,7 @@ library InternalSkinnyIMT {
         }
 
         // Update tree size
-        self.size = treeSize + leaves.length;
+        self.size = oldTreeSize + leaves.length;
 
         self.sideNodes[treeDepth] = currentLevelNewNodes[0];
 
@@ -297,8 +306,8 @@ library InternalSkinnyIMT {
     /// @param value: The leaf value to insert `amount` copies of.
     /// @param amount: The number of leaves to append.
     /// @return root after the leaves have been appended.
-    /// @return firstIndex after the leaves have been appended.
-    /// @return lastIndex after the leaves have been appended.
+    /// @return firstIndex index of the first appended leaf (inclusive).
+    /// @return lastIndex index of the last appended leaf (inclusive).
     function _insertManyRepeated(
         SkinnyIMTData storage self,
         uint256 value,
@@ -327,7 +336,8 @@ library InternalSkinnyIMT {
             // after above no-op, to prevent underflow
             lastIndex = newSize - 1;
             if (amount == 1) {
-                return (_insert(self, value, hasher), firstIndex, lastIndex);
+                (root, ) = _insert(self, value, hasher);
+                return (root, firstIndex, lastIndex);
             }
 
             self.depth = newTreeDepth;

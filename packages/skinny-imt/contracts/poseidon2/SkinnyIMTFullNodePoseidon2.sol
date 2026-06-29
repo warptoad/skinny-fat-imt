@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {InternalSkinnyIMT, SkinnyIMTData} from "../InternalSkinnyIMT.sol";
+import {InternalSkinnyIMT, SkinnyIMTFullNodeData} from "../InternalSkinnyIMT.sol";
 // import {IPoseidon2} from "poseidon2-evm/src/IPoseidon2.sol";
 import {LibPoseidon2Yul} from "poseidon2-evm/src/bn254/yul/LibPoseidon2Yul.sol";
-import {NewTree, NewLeaf, RepeatedLeafs, UpdatedLeaf} from "../interfaces/events.sol";
+import {NewTree, NewLeaf, UpdatedLeaf} from "../interfaces/events.sol";
 
-library SkinnyIMTPoseidon2 {
+/// @title SkinnyIMTFullNodePoseidon2
+/// @author Jim Jim Valkema
+/// @notice stores all leafs on-chain so full nodes can retrieve them even after events are pruned (older than 1 year)
+library SkinnyIMTFullNodePoseidon2 {
     // @TODO ask zemse if the wants to make Poseidon2Yul_BN254 an library with public functions, would add 50~150 gas
     // Hardcoded since poseidon2 is deployed as a contract instead of a library
     // This is because author used a gas saving trick with .fallback
@@ -27,8 +30,8 @@ library SkinnyIMTPoseidon2 {
     /// Reverts if the tree has already been initialized.
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @return The newly assigned tree id.
-    function init(SkinnyIMTData storage self) public returns (uint256) {
-        uint256 treeId = InternalSkinnyIMT._init(self);
+    function init(SkinnyIMTFullNodeData storage self) public returns (uint256) {
+        uint256 treeId = InternalSkinnyIMT._init(self.skinnyData);
         emit NewTree(treeId);
         return treeId;
     }
@@ -38,14 +41,15 @@ library SkinnyIMTPoseidon2 {
     /// @param leaf: The value of the new leaf to be inserted into the tree.
     /// @return root, index
     /// @notice Checks that the leaf are within the snark scalar field
-    function insert(SkinnyIMTData storage self, uint256 leaf) public returns (uint256, uint256) {
+    function insert(SkinnyIMTFullNodeData storage self, uint256 leaf) public returns (uint256, uint256) {
         InternalSkinnyIMT._requireInField(leaf);
 
         // update tree
-        (uint256 _root, uint256 _index) = InternalSkinnyIMT._insert(self, leaf, hasher);
+        (uint256 _root, uint256 _index) = InternalSkinnyIMT._insert(self.skinnyData, leaf, hasher);
 
-        // emit event
-        emit NewLeaf(self.treeId, _index, leaf);
+        // emit event, store leaf
+        emit NewLeaf(self.skinnyData.treeId, _index, leaf);
+        self.leaves.push(leaf);
 
         return (_root, _index);
     }
@@ -58,52 +62,71 @@ library SkinnyIMTPoseidon2 {
     /// @return _nextIndex The index for the next insert after this call (exclusive).
     /// @notice Checks that the leafs are within the snark scalar field
     function insertMany(
-        SkinnyIMTData storage self,
+        SkinnyIMTFullNodeData storage self,
         uint256[] calldata leaves
     ) public returns (uint256, uint256, uint256) {
-        uint256 _startIndex = self.size;
+        uint256 _startIndex = self.skinnyData.size;
         uint256 _nextIndex = _startIndex + leaves.length;
 
-        // emit events, checks
-        uint256 treeId = self.treeId;
+        // emit events, store leafs, checks
+        uint256 treeId = self.skinnyData.treeId;
         for (uint256 i = 0; i < leaves.length; ) {
             uint256 leaf = leaves[i];
             InternalSkinnyIMT._requireInField(leaf);
             emit NewLeaf(treeId, _startIndex + i, leaf);
+
+            self.leaves.push(leaf);
             unchecked {
                 ++i;
             }
         }
 
         // update tree
-        uint256 _root = InternalSkinnyIMT._insertMany(self, leaves, hasher);
+        uint256 _root = InternalSkinnyIMT._insertMany(self.skinnyData, leaves, hasher);
 
         return (_root, _startIndex, _nextIndex);
     }
 
     /// @notice Appends `amount` copies of `value` to the tree.
-    /// @dev O(log(size + amount)) hashes — see `InternalSkinnyIMT._insertManyRepeated`.
-    /// Calldata is O(1) (just `value` and `amount`). Subsequent calls with the same
-    /// `value` are cheaper because the per-level repeated-subtree cache persists
-    /// in storage; use `precomputeRepeatedCache` to warm the cache ahead of time.
-    /// No per-leaf events are emitted; callers reconstruct ranges off-chain from
-    /// `(size, depth)` and the constant `value`.
+    /// @notice FullNode version stores all leafs, so a `NewLeaf` is emitted per leaf
+    /// instead of a single `RepeatedLeafs`.
+    /// @dev Tree hashing is O(log(size + amount)) (see `InternalSkinnyIMT._insertManyRepeated`),
+    /// but storing + emitting every leaf makes this O(amount) overall — not cheap for large `amount`.
+    /// Subsequent calls with the same `value` hash cheaper via the per-level cache;
+    /// use `precomputeRepeatedCache` to warm it.
     /// Reverts if `value` is not within the snark scalar field.
     /// @param self A storage reference to the `SkinnyIMTData` struct.
-    /// @param value The leaf value to insert `amount` copies of.
+    /// @param leaf The leaf value to insert `amount` copies of.
     /// @param amount The number of leaves to append.
     /// @return _root The new root after the leaves have been appended.
     /// @return _startIndex The index of the first inserted leaf (inclusive).
     /// @return _nextIndex The index for the next insert after this call (exclusive).
     function insertManyRepeated(
-        SkinnyIMTData storage self,
-        uint256 value,
+        SkinnyIMTFullNodeData storage self,
+        uint256 leaf,
         uint256 amount
-    ) public returns (uint256 _root, uint256 _startIndex, uint256 _nextIndex) {
-        InternalSkinnyIMT._requireInField(value);
-        (_root, _startIndex, ) = InternalSkinnyIMT._insertManyRepeated(self, value, amount, hasher);
-        _nextIndex = _startIndex + amount;
-        emit RepeatedLeafs(self.treeId, _startIndex, _nextIndex, value);
+    ) public returns (uint256, uint256, uint256) {
+        // check
+        InternalSkinnyIMT._requireInField(leaf);
+
+        // update tree
+        (uint256 _root, uint256 _startIndex, ) = InternalSkinnyIMT._insertManyRepeated(
+            self.skinnyData,
+            leaf,
+            amount,
+            hasher
+        );
+        uint256 _nextIndex = _startIndex + amount;
+        // add leafs, emit event
+        uint256 _treeId = self.skinnyData.treeId;
+        for (uint256 _index = _startIndex; _index < _nextIndex; ) {
+            emit NewLeaf(_treeId, _index, leaf);
+            self.leaves.push(leaf);
+            unchecked {
+                ++_index;
+            }
+        }
+
         return (_root, _startIndex, _nextIndex);
     }
 
@@ -115,12 +138,28 @@ library SkinnyIMTPoseidon2 {
     /// @return _startIndex The index of the first inserted leaf (inclusive).
     /// @return _nextIndex The index for the next insert after this call (exclusive).
     function insertManyZeros(
-        SkinnyIMTData storage self,
+        SkinnyIMTFullNodeData storage self,
         uint256 amount
-    ) public returns (uint256 _root, uint256 _startIndex, uint256 _nextIndex) {
-        (_root, _startIndex, ) = InternalSkinnyIMT._insertManyRepeated(self, 0, amount, hasher);
-        _nextIndex = _startIndex + amount;
-        emit RepeatedLeafs(self.treeId, _startIndex, _nextIndex, 0);
+    ) public returns (uint256, uint256, uint256) {
+        // update tree
+        (uint256 _root, uint256 _startIndex, ) = InternalSkinnyIMT._insertManyRepeated(
+            self.skinnyData,
+            0,
+            amount,
+            hasher
+        );
+        uint256 _nextIndex = _startIndex + amount;
+
+        // add leafs, emit event
+        uint256 _treeId = self.skinnyData.treeId;
+        for (uint256 _index = _startIndex; _index < _nextIndex; ) {
+            emit NewLeaf(_treeId, _index, 0);
+            self.leaves.push(0);
+            unchecked {
+                ++_index;
+            }
+        }
+
         return (_root, _startIndex, _nextIndex);
     }
 
@@ -131,9 +170,9 @@ library SkinnyIMTPoseidon2 {
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @param value: The leaf value whose repeated-subtree chain to precompute.
     /// @param upToLevel: The highest level (inclusive) to populate the cache for.
-    function precomputeRepeatedCache(SkinnyIMTData storage self, uint256 value, uint256 upToLevel) public {
+    function precomputeRepeatedCache(SkinnyIMTFullNodeData storage self, uint256 value, uint256 upToLevel) public {
         InternalSkinnyIMT._requireInField(value);
-        InternalSkinnyIMT._precomputeRepeatedCache(self, value, upToLevel, hasher);
+        InternalSkinnyIMT._precomputeRepeatedCache(self.skinnyData, value, upToLevel, hasher);
     }
 
     /// @dev Updates the value of an existing leaf and recalculates hashes
@@ -148,7 +187,7 @@ library SkinnyIMTPoseidon2 {
     /// which sideNode to refresh by hash equality, so a collision between two distinct subtree roots would corrupt tree state silently.
     /// @notice Checks that the leaf and siblingNodes are within the snark scalar field
     function update(
-        SkinnyIMTData storage self,
+        SkinnyIMTFullNodeData storage self,
         uint256 oldLeaf,
         uint256 newLeaf,
         uint256 index,
@@ -162,10 +201,11 @@ library SkinnyIMTPoseidon2 {
         }
 
         // update tree
-        uint256 _root = InternalSkinnyIMT._update(self, oldLeaf, newLeaf, index, siblingNodes, hasher);
+        uint256 _root = InternalSkinnyIMT._update(self.skinnyData, oldLeaf, newLeaf, index, siblingNodes, hasher);
 
-        // emit event
-        emit UpdatedLeaf(self.treeId, index, newLeaf, oldLeaf);
+        // emit event store new leaf
+        emit UpdatedLeaf(self.skinnyData.treeId, index, newLeaf, oldLeaf);
+        self.leaves[index] = newLeaf;
 
         return _root;
     }
@@ -178,7 +218,7 @@ library SkinnyIMTPoseidon2 {
     /// @return A boolean value indicating whether the leaf exists in the tree.
     /// @notice Checks that the leaf and siblingNodes are within the snark scalar field
     function verify(
-        SkinnyIMTData storage self,
+        SkinnyIMTFullNodeData storage self,
         uint256 leaf,
         uint256 index,
         uint256[] calldata siblingNodes
@@ -187,14 +227,14 @@ library SkinnyIMTPoseidon2 {
         for (uint256 i = 0; i < siblingNodes.length; i++) {
             InternalSkinnyIMT._requireInField(siblingNodes[i]);
         }
-        return InternalSkinnyIMT._verify(self, leaf, index, siblingNodes, hasher);
+        return InternalSkinnyIMT._verify(self.skinnyData, leaf, index, siblingNodes, hasher);
     }
 
     /// @dev Retrieves the root of the tree from the 'sideNodes' mapping using the
     /// current tree depth.
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @return The root hash of the tree.
-    function root(SkinnyIMTData storage self) public view returns (uint256) {
-        return InternalSkinnyIMT._root(self);
+    function root(SkinnyIMTFullNodeData storage self) public view returns (uint256) {
+        return InternalSkinnyIMT._root(self.skinnyData);
     }
 }
