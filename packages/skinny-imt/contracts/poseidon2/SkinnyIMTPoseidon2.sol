@@ -99,10 +99,11 @@ library SkinnyIMTPoseidon2 {
         SkinnyIMTData storage self,
         uint256 value,
         uint256 amount
-    ) public returns (uint256 _root, uint256 _startIndex, uint256 _nextIndex) {
+    ) public returns (uint256, uint256, uint256) {
+        // check
         InternalSkinnyIMT._requireInField(value);
-        (_root, _startIndex, ) = InternalSkinnyIMT._insertManyRepeated(self, value, amount, hasher);
-        _nextIndex = _startIndex + amount;
+        (uint256 _root, uint256 _startIndex, ) = InternalSkinnyIMT._insertManyRepeated(self, value, amount, hasher);
+        uint256 _nextIndex = _startIndex + amount;
         emit RepeatedLeafs(self.treeId, _startIndex, _nextIndex, value);
         return (_root, _startIndex, _nextIndex);
     }
@@ -114,13 +115,14 @@ library SkinnyIMTPoseidon2 {
     /// @return _root The new root after the leaves have been appended.
     /// @return _startIndex The index of the first inserted leaf (inclusive).
     /// @return _nextIndex The index for the next insert after this call (exclusive).
-    function insertManyZeros(
-        SkinnyIMTData storage self,
-        uint256 amount
-    ) public returns (uint256 _root, uint256 _startIndex, uint256 _nextIndex) {
-        (_root, _startIndex, ) = InternalSkinnyIMT._insertManyRepeated(self, 0, amount, hasher);
-        _nextIndex = _startIndex + amount;
+    function insertManyZeros(SkinnyIMTData storage self, uint256 amount) public returns (uint256, uint256, uint256) {
+        // update tree
+        (uint256 _root, uint256 _startIndex, ) = InternalSkinnyIMT._insertManyRepeated(self, 0, amount, hasher);
+
+        // emit event
+        uint256 _nextIndex = _startIndex + amount;
         emit RepeatedLeafs(self.treeId, _startIndex, _nextIndex, 0);
+
         return (_root, _startIndex, _nextIndex);
     }
 
@@ -170,6 +172,7 @@ library SkinnyIMTPoseidon2 {
         return _root;
     }
 
+    // @TODO surface method to verify against any root not just current
     /// @dev Checks if a leaf exists in the tree.
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @param leaf: The value of the leaf to check for existence.
@@ -187,7 +190,64 @@ library SkinnyIMTPoseidon2 {
         for (uint256 i = 0; i < siblingNodes.length; i++) {
             InternalSkinnyIMT._requireInField(siblingNodes[i]);
         }
-        return InternalSkinnyIMT._verify(self, leaf, index, siblingNodes, hasher);
+        uint256 _currentRoot = InternalSkinnyIMT._root(self);
+        uint256 _provenRoot = InternalSkinnyIMT._proofToRoot(leaf, index, siblingNodes, hasher);
+        return _currentRoot == _provenRoot;
+    }
+
+    /// @dev Checks that a batch of leaves all exist in the tree using a single
+    /// shared (deduplicated) Merkle multiproof against the current root. Cheaper
+    /// than one `verify` per leaf because sibling nodes shared between proofs are
+    /// supplied only once and the root is read only once.
+    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+    /// @param leaves: The leaf values to check, ordered by ascending index.
+    /// @param indices: The strictly-increasing indices of `leaves`.
+    /// @param proofSiblings: The deduplicated sibling nodes needed to rebuild the
+    /// root, ordered bottom-up and left-to-right (see InternalSkinnyIMT._rootFromMultiProof).
+    /// @return True iff every leaf is present at its index under the current root.
+    /// @notice Checks that every leaf and proof sibling is within the snark scalar field.
+    function verifyMany(
+        SkinnyIMTData storage self,
+        uint256[] calldata leaves,
+        uint256[] calldata indices,
+        uint256[] calldata proofSiblings
+    ) public view returns (bool) {
+        for (uint256 i = 0; i < leaves.length; i++) {
+            InternalSkinnyIMT._requireInField(leaves[i]);
+        }
+        for (uint256 i = 0; i < proofSiblings.length; i++) {
+            InternalSkinnyIMT._requireInField(proofSiblings[i]);
+        }
+        uint256 computedRoot = InternalSkinnyIMT._proofManyToRoot(leaves, indices, proofSiblings, self.size, hasher);
+        return computedRoot == InternalSkinnyIMT._root(self);
+    }
+
+    /// @dev Checks a batch of leaves against an arbitrary `root` (current or
+    /// historical) using a shared (deduplicated) Merkle multiproof. Because the
+    /// proof reads no tree state, the caller supplies both the `root` and the
+    /// `size` (leaf count) of the tree that produced it.
+    /// @param expectedRoot: The root to verify inclusion against.
+    /// @param size: The leaf count of the tree that produced `expectedRoot`.
+    /// @param leaves: The leaf values to check, ordered by ascending index.
+    /// @param indices: The strictly-increasing indices of `leaves`.
+    /// @param proofSiblings: The deduplicated sibling nodes needed to rebuild the
+    /// root, ordered bottom-up and left-to-right (see InternalSkinnyIMT._rootFromMultiProof).
+    /// @return True iff every leaf is present at its index under `expectedRoot`.
+    /// @notice Checks that every leaf and proof sibling is within the snark scalar field.
+    function verifyManyAgainstRoot(
+        uint256 expectedRoot,
+        uint256 size,
+        uint256[] calldata leaves,
+        uint256[] calldata indices,
+        uint256[] calldata proofSiblings
+    ) public view returns (bool) {
+        for (uint256 i = 0; i < leaves.length; i++) {
+            InternalSkinnyIMT._requireInField(leaves[i]);
+        }
+        for (uint256 i = 0; i < proofSiblings.length; i++) {
+            InternalSkinnyIMT._requireInField(proofSiblings[i]);
+        }
+        return InternalSkinnyIMT._proofManyToRoot(leaves, indices, proofSiblings, size, hasher) == expectedRoot;
     }
 
     /// @dev Retrieves the root of the tree from the 'sideNodes' mapping using the

@@ -227,7 +227,9 @@ library SkinnyIMTFullNodePoseidon2 {
         for (uint256 i = 0; i < siblingNodes.length; i++) {
             InternalSkinnyIMT._requireInField(siblingNodes[i]);
         }
-        return InternalSkinnyIMT._verify(self.skinnyData, leaf, index, siblingNodes, hasher);
+        uint256 _currentRoot = InternalSkinnyIMT._root(self.skinnyData);
+        uint256 _provenRoot = InternalSkinnyIMT._proofToRoot(leaf, index, siblingNodes, hasher);
+        return _currentRoot == _provenRoot;
     }
 
     /// @dev Retrieves the root of the tree from the 'sideNodes' mapping using the

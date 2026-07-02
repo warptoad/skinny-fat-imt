@@ -6,5 +6,6 @@ import { runSkinnyIMTTests } from "../shared/skinnyIMTTests"
 runSkinnyIMTTests({
     deployTaskName: "deploy:imt-poseidon2-test",
     libraryName: "SkinnyIMTPoseidon2",
-    hashFn: (a, b) => poseidon2Hash([a, b])
+    hashFn: (a, b) => poseidon2Hash([a, b]),
+    hasVerifyMany: true
 })

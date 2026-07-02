@@ -47,6 +47,24 @@ contract SkinnyIMTPoseidon2Test {
         return SkinnyIMTPoseidon2.verify(data, leaf, index, siblingsNodes);
     }
 
+    function verifyMany(
+        uint256[] calldata leaves,
+        uint256[] calldata indices,
+        uint256[] calldata proofSiblings
+    ) external view returns (bool) {
+        return SkinnyIMTPoseidon2.verifyMany(data, leaves, indices, proofSiblings);
+    }
+
+    function verifyManyAgainstRoot(
+        uint256 expectedRoot,
+        uint256 treeSize,
+        uint256[] calldata leaves,
+        uint256[] calldata indices,
+        uint256[] calldata proofSiblings
+    ) external view returns (bool) {
+        return SkinnyIMTPoseidon2.verifyManyAgainstRoot(expectedRoot, treeSize, leaves, indices, proofSiblings);
+    }
+
     function root() public view returns (uint256) {
         return SkinnyIMTPoseidon2.root(data);
     }
