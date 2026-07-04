@@ -669,16 +669,25 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
         })
 
         describe("# verify", () => {
+            // Verifies `value` against the on-chain tree using its REAL (raw) array
+            // position -- jsLeanIMT.indexOf(value) -- NOT the compacted proof.index.
+            // The siblings are exactly what zk-kit supplies (dangle levels omitted).
+            async function verifyByRealIndex(value: bigint): Promise<boolean> {
+                const realIndex = jsLeanIMT.indexOf(value)
+                const { siblings } = jsLeanIMT.generateProof(realIndex)
+                return skinnyIMTTest.verify(value, realIndex, siblings)
+            }
+
             it("Should return true because the node is in the tree", async () => {
                 await skinnyIMTTest.insert(1)
                 jsLeanIMT.insert(1n)
-                const proof = jsLeanIMT.generateProof(0)
-                const hasLeaf = await skinnyIMTTest.verify(1, 0, proof.siblings)
 
-                expect(hasLeaf).to.equal(true)
+                expect(await verifyByRealIndex(1n)).to.equal(true)
             })
 
             it("Should return false because the node is not the tree", async () => {
+                // should insert something other wise, treeSize == 0 and _proofToRoot reverts with "TreeEmpty"
+                await skinnyIMTTest.insert(1)
                 jsLeanIMT.insert(2n)
                 const proof = jsLeanIMT.generateProof(0)
                 const hasLeaf = await skinnyIMTTest.verify(2, 0, proof.siblings)
@@ -693,13 +702,54 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 jsLeanIMT.update(1, BigInt(0))
 
                 const { siblings } = jsLeanIMT.generateProof(1)
-
                 await skinnyIMTTest.update(2, 0, 1, siblings)
 
-                const proof = jsLeanIMT.generateProof(1)
-                const hasLeaf = await skinnyIMTTest.verify(0, 1, proof.siblings)
+                // leaf 0 sits at real index 1
+                expect(await verifyByRealIndex(0n)).to.equal(true)
+            })
 
-                expect(hasLeaf).to.equal(true)
+            it("Should verify a dense interior leaf by its real index", async () => {
+                jsLeanIMT.insertMany([1n, 2n, 3n, 4n])
+                await skinnyIMTTest.insertMany([1, 2, 3, 4])
+
+                // leaf 3 -> real index 2; a sibling exists at every level (raw == compacted)
+                expect(await verifyByRealIndex(3n)).to.equal(true)
+            })
+
+            // --- Dangling right-edge leaves. The proof SKIPS a level (a rightmost
+            // left child that bubbles up), so the raw array index differs from the
+            // compacted proof.index. A naive `index >> (treeDepth - siblings.length)`
+            // shift lands on the wrong root here, because the skipped level is NOT the
+            // lowest one -- there is a real "right turn" below the skip.
+
+            it("Should verify a dangling right-edge leaf with a real turn below the skip (size 6)", async () => {
+                // leaf 6 -> real index 5
+                //   level 0: right child (pairs with leaf 5) -> real sibling
+                //   level 1: rightmost left child            -> DANGLE (skipped)
+                //   level 2: right child                     -> real sibling
+                // raw index    = 5 (101)
+                // compacted    = 3  (11)   <- proof.index
+                // naive 5 >> 1 = 2  (10)   <- WRONG
+                jsLeanIMT.insertMany([1n, 2n, 3n, 4n, 5n, 6n])
+                await skinnyIMTTest.insertMany([1, 2, 3, 4, 5, 6])
+
+                expect(await verifyByRealIndex(6n)).to.equal(true)
+            })
+
+            it("Should verify a dangling right-edge leaf skipped higher up the tree (size 12)", async () => {
+                // leaf 12 -> real index 11
+                //   level 0: right child          -> real sibling
+                //   level 1: right child          -> real sibling
+                //   level 2: rightmost left child -> DANGLE (skipped)
+                //   level 3: right child          -> real sibling
+                // raw index     = 11 (1011)
+                // compacted     =  7  (111)  <- proof.index
+                // naive 11 >> 1 =  5  (101)  <- WRONG
+                const values = Array.from({ length: 12 }, (_, i) => i + 1)
+                jsLeanIMT.insertMany(values.map((v) => BigInt(v)))
+                await skinnyIMTTest.insertMany(values)
+
+                expect(await verifyByRealIndex(12n)).to.equal(true)
             })
         })
 

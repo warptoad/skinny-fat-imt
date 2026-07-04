@@ -48,7 +48,7 @@ contract SkinnyIMTPoseidon2Test {
     }
 
     function verifyMany(
-        uint256[] calldata leaves,
+        uint256[][] calldata leaves,
         uint256[] calldata indices,
         uint256[] calldata proofSiblings
     ) external view returns (bool) {
@@ -58,7 +58,7 @@ contract SkinnyIMTPoseidon2Test {
     function verifyManyAgainstRoot(
         uint256 expectedRoot,
         uint256 treeSize,
-        uint256[] calldata leaves,
+        uint256[][] calldata leaves,
         uint256[] calldata indices,
         uint256[] calldata proofSiblings
     ) external view returns (bool) {

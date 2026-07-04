@@ -42,6 +42,7 @@ error NotInitialized();
 error AlreadyInitialized();
 error LeafGreaterThanSnarkScalarField();
 error WrongMultiProof();
+error TreeEmpty();
 
 /// @title Skinny Incremental binary Merkle tree.
 /// @dev The SkinnyIMT is an optimized version of the BinaryIMT.
@@ -568,42 +569,46 @@ library InternalSkinnyIMT {
 
         // index of the very last leaf in the tree
         // tracking this index up the tree, follows the indexes of the nodes in self.sidNodes
-        uint256 lastIndex = self.size - 1;
+        uint256 edgeIndex = self.size - 1;
 
-        uint256 i = 0;
+        // because leanIMT is not balanced siblingNodes.length can be smaller then tree depth
+        // we cant just use level so we separately track those 2
+        uint256 siblingIndex = 0;
 
         // verify merkle proof of oldLeaf from siblingNodes
         // and at the same time calculate the newRoot
 
-        // TODO do _verify instead. Check how much gas that adds
+        // note: this is basically just _proofToRoot twice on old and new leaf, then assert root from oldLeaf is
+        // the current root. Difference is that self.sideNodes[level] = newNode gets assigned when newNode is an
+        // edge node. Thats when newNode is left.
         for (uint256 level = 0; level < treeDepth; ) {
             if ((leafIndex >> level) & 1 == 1) {
                 // no newNode to store in sideNodes to store here, the next insert does not need it if it already
                 // has a sibling
-                newNode = hasher([siblingNodes[i], newNode]);
-                oldNode = hasher([siblingNodes[i], oldNode]);
+                newNode = hasher([siblingNodes[siblingIndex], newNode]);
+                oldNode = hasher([siblingNodes[siblingIndex], oldNode]);
 
                 unchecked {
-                    ++i;
+                    ++siblingIndex;
                 }
             } else {
-                if (leafIndex >> level != lastIndex >> level) {
+                if (leafIndex >> level != edgeIndex >> level) {
                     // does the index of newNode at the current level,
                     // share a parent with the lastIndex at the current level?
                     // So newNode/lastIndex current index == index >> level, then add +1 to level to get the parent
 
                     // @notice used to be simple self.sideNodes[level] == oldNode equality check in leanIMT,
                     // but duplicate values occurring break this assumption
-                    if (leafIndex >> (level + 1) == lastIndex >> (level + 1)) {
+                    if (leafIndex >> (level + 1) == edgeIndex >> (level + 1)) {
                         // same parent on next level, so newNode is a left sibling of !
                         self.sideNodes[level] = newNode;
                     }
 
-                    newNode = hasher([newNode, siblingNodes[i]]);
-                    oldNode = hasher([oldNode, siblingNodes[i]]);
+                    newNode = hasher([newNode, siblingNodes[siblingIndex]]);
+                    oldNode = hasher([oldNode, siblingNodes[siblingIndex]]);
 
                     unchecked {
-                        ++i;
+                        ++siblingIndex;
                     }
                 } else {
                     self.sideNodes[level] = newNode;
@@ -625,36 +630,50 @@ library InternalSkinnyIMT {
     }
 
     /// @dev Hashes merkle proof and returns the root the leaf belongs to
-    /// @param leaf: The leaf to proof inclusion of
-    /// @param index: The index of the leaf within the tree.
+    /// @param leafIndex: The leaf to proof inclusion of
+    /// @param leafIndex: The index of the leaf within the tree.
     /// @param siblingNodes: The sibling nodes along the path from the leaf to the root.
     /// @return The root obtained from hashing the leaf with the provided siblings.
     /// @notice Contracts using this function with snark based hash functions,
     /// need to check that the leaf and siblingNodes are within the snark scalar field.
     function _proofToRoot(
         uint256 leaf,
-        uint256 index,
+        uint256 leafIndex,
+        uint256 treeDepth,
+        uint256 treeSize,
         uint256[] calldata siblingNodes,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal view returns (uint256) {
+        if (treeSize == 0) {
+            revert TreeEmpty();
+        } else if (siblingNodes.length > treeDepth) {
+            revert WrongSiblingNodes();
+        }
+
+        // index of the very last leaf in the tree
+        // tracking this index up the tree, follows the indexes of the nodes in self.sidNodes
+        uint256 edgeIndex = treeSize - 1;
+
+        // because leanIMT is not balanced siblingNodes.length can be smaller then tree depth
+        // we cant just use level so we separately track those 2
+        uint256 siblingIndex = 0;
+
         uint256 node = leaf;
-
-        uint256 i = 0;
-
-        uint256 proofDepth = siblingNodes.length;
-
-        for (uint256 level = 0; level < proofDepth; ) {
-            if ((index >> level) & 1 == 1) {
-                node = hasher([siblingNodes[i], node]);
+        for (uint256 level = 0; level < treeDepth; ) {
+            if ((leafIndex >> level) & 1 == 1) {
+                node = hasher([siblingNodes[siblingIndex], node]);
 
                 unchecked {
-                    ++i;
+                    ++siblingIndex;
                 }
             } else {
-                node = hasher([node, siblingNodes[i]]);
+                // make sure node index is not at the edge @TODO explain
+                if (leafIndex >> level != edgeIndex >> level) {
+                    node = hasher([node, siblingNodes[siblingIndex]]);
 
-                unchecked {
-                    ++i;
+                    unchecked {
+                        ++siblingIndex;
+                    }
                 }
             }
 
@@ -860,12 +879,51 @@ library InternalSkinnyIMT {
     // }
 
     function _proofManyToRoot(
-        uint256[] calldata leaves,
+        uint256[][] calldata leaves,
         uint256[] calldata indexes,
-        uint256[] calldata siblings,
+        uint256[] calldata siblingNodes,
         uint256 size,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal view returns (uint256) {}
+
+    //     uint256[] memory nodes;
+    //     //uint256[] memory nodesIndexes = indexes;
+
+    //     uint256 proofDepth = siblingNodes.length;
+    //     uint256 nodesSize = leaves.length;
+
+    //     for (uint256 level = 0; level < proofDepth; ) {
+    //         for (uint256 i = 0; i < leaves[level].length; i++) {
+
+    //         }
+
+    //         for (uint256 nodesSelector = 0; nodesSelector < nodesSize; nodesSelector++) {
+    //             uint256 node = nodes[nodesSelector];
+    //             uint256 index = indexes[nodesSelector] >> level;
+
+    //             // if (leafIndex >> (level + 1) == edgeIndex >> (level + 1)) {
+    //             // }
+    //             if (index & 1 == 1) {
+    //                 node = hasher([siblingNodes[i], node]);
+
+    //                 unchecked {
+    //                     ++i;
+    //                 }
+    //             } else {
+    //                 node = hasher([node, siblingNodes[i]]);
+
+    //                 unchecked {
+    //                     ++i;
+    //                 }
+    //             }
+
+    //             unchecked {
+    //                 ++level;
+    //             }
+    //         }
+    //     }
+    //     return nodes[0];
+    // }
 
     /// @dev Retrieves the root of the tree from the 'sideNodes' mapping using the
     /// current tree depth.

@@ -228,7 +228,14 @@ library SkinnyIMTFullNodePoseidon2 {
             InternalSkinnyIMT._requireInField(siblingNodes[i]);
         }
         uint256 _currentRoot = InternalSkinnyIMT._root(self.skinnyData);
-        uint256 _provenRoot = InternalSkinnyIMT._proofToRoot(leaf, index, siblingNodes, hasher);
+        uint256 _provenRoot = InternalSkinnyIMT._proofToRoot(
+            leaf,
+            index,
+            self.skinnyData.depth,
+            self.skinnyData.size,
+            siblingNodes,
+            hasher
+        );
         return _currentRoot == _provenRoot;
     }
 

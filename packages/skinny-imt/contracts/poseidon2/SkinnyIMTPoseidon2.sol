@@ -191,7 +191,7 @@ library SkinnyIMTPoseidon2 {
             InternalSkinnyIMT._requireInField(siblingNodes[i]);
         }
         uint256 _currentRoot = InternalSkinnyIMT._root(self);
-        uint256 _provenRoot = InternalSkinnyIMT._proofToRoot(leaf, index, siblingNodes, hasher);
+        uint256 _provenRoot = InternalSkinnyIMT._proofToRoot(leaf, index, self.depth, self.size, siblingNodes, hasher);
         return _currentRoot == _provenRoot;
     }
 
@@ -208,12 +208,14 @@ library SkinnyIMTPoseidon2 {
     /// @notice Checks that every leaf and proof sibling is within the snark scalar field.
     function verifyMany(
         SkinnyIMTData storage self,
-        uint256[] calldata leaves,
+        uint256[][] calldata leaves,
         uint256[] calldata indices,
         uint256[] calldata proofSiblings
     ) public view returns (bool) {
         for (uint256 i = 0; i < leaves.length; i++) {
-            InternalSkinnyIMT._requireInField(leaves[i]);
+            for (uint256 j = 0; j < leaves.length; j++) {
+                InternalSkinnyIMT._requireInField(leaves[i][j]);
+            }
         }
         for (uint256 i = 0; i < proofSiblings.length; i++) {
             InternalSkinnyIMT._requireInField(proofSiblings[i]);
@@ -237,12 +239,14 @@ library SkinnyIMTPoseidon2 {
     function verifyManyAgainstRoot(
         uint256 expectedRoot,
         uint256 size,
-        uint256[] calldata leaves,
+        uint256[][] calldata leaves,
         uint256[] calldata indices,
         uint256[] calldata proofSiblings
     ) public view returns (bool) {
         for (uint256 i = 0; i < leaves.length; i++) {
-            InternalSkinnyIMT._requireInField(leaves[i]);
+            for (uint256 j = 0; j < leaves.length; j++) {
+                InternalSkinnyIMT._requireInField(leaves[i][j]);
+            }
         }
         for (uint256 i = 0; i < proofSiblings.length; i++) {
             InternalSkinnyIMT._requireInField(proofSiblings[i]);
