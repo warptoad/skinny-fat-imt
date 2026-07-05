@@ -11,28 +11,35 @@ export interface SkinnyIMTTestConfig {
     hasVerifyMany?: boolean
 }
 
-// Builds a single shared (deduplicated) multiproof for `rawIndices` against
-// `tree`, in the exact order InternalSkinnyIMT._rootFromMultiProof consumes it:
-// climb every level once, and whenever a known node's sibling can't be derived
-// from another supplied leaf (or a dangling right edge), pull it from the tree.
-// Returns the (sorted, unique) leaves/indices plus the flat sibling list.
+// Builds a shared (deduplicated) multiproof for `rawIndices` against `tree`, in
+// the flat shape `_proofManyToRoot` expects:
+//   - `leaves`: flat leaf values in ascending-index order.
+//   - `leafIndexes`: the matching real tree indexes, aligned entry-for-entry.
+//   - `leavesLevelIndexes`: one entry per level 0..depth; entry[level] is the flat
+//     index of the LAST leaf that SITS at or below that level. Every leaf sits at
+//     level 0 except the tree's last leaf when it dangles — its value is unchanged
+//     as it dangles, so it sits at the level where it first pairs (leaf 12 of a
+//     size-13 tree sits at level 2, giving `[11, 11, 12, 12, 12]`).
+//   - `siblings`: the flat, bottom-up / left-to-right proof-sibling stream (a
+//     paired neighbour and a right-edge dangle cost nothing; everything else
+//     pulls one). Dangling is free, so the per-level grouping doesn't change
+//     which siblings are needed — this is computed exactly as before.
 function generateMultiProof(
     tree: JSLeanIMT,
     rawIndices: number[]
-): { leaves: bigint[]; indices: number[]; siblings: bigint[] } {
+): { leaves: bigint[]; leafIndexes: number[]; leavesLevelIndexes: number[]; siblings: bigint[] } {
     const indices = [...new Set(rawIndices)].sort((a, b) => a - b)
     // `_nodes[level][position]` holds every computed node; it isn't in the public typings.
     const nodes = (tree as any)._nodes as bigint[][]
+    const size = tree.size
+    const depth = tree.depth
 
-    // Mirror of _climbMultiProofLevel: start from the leaf positions we're
-    // proving and climb, collecting a sibling only where the contract will read
-    // one from the flat stream — i.e. not a paired neighbour and not a right-edge
-    // dangle. This produces the siblings in the exact order the contract spends them.
+    // --- proofSiblings: climb the known set from level 0 and collect a sibling
+    //     only where the contract reads one from the stream. ---
     let knownPositions = indices.slice()
-    let levelSize = tree.size
+    let levelSize = size
     const siblings: bigint[] = []
-
-    for (let level = 0; level < tree.depth; level += 1) {
+    for (let level = 0; level < depth; level += 1) {
         const parentPositions: number[] = []
         let readCursor = 0
         while (readCursor < knownPositions.length) {
@@ -62,7 +69,40 @@ function generateMultiProof(
         levelSize = Math.ceil(levelSize / 2)
     }
 
-    return { leaves: indices.map((idx) => tree.leaves[idx]), indices, siblings }
+    // --- the level each leaf sits at (parallel to the ascending-index flat list) ---
+    // A leaf sits at level 0, unless it is the tree's right-edge leaf and keeps
+    // dangling: climb while it stays an even node that hasn't reached the root,
+    // stopping at the level where it first has a sibling (pairs).
+    const sitLevels = indices.map((idx) => {
+        let level = 0
+        let ls = size
+        while (idx === size - 1 && Math.floor(idx / 2 ** level) % 2 === 0 && ls > 1) {
+            level += 1
+            ls = Math.ceil(ls / 2)
+        }
+        return level
+    })
+
+    // Only the last leaf can dangle, so sitLevels is non-decreasing and the leaves
+    // at or below a level form a prefix of the flat array. leavesLevelIndexes[level]
+    // is the flat index of that prefix's last leaf (one entry per level 0..depth).
+    // (A level with no leaves at/below it — e.g. proving only the dangling last
+    // leaf — would yield -1 here; none of these tests hit that case.)
+    const leavesLevelIndexes: number[] = []
+    for (let level = 0; level <= depth; level += 1) {
+        let boundary = -1
+        for (let k = 0; k < sitLevels.length; k += 1) {
+            if (sitLevels[k] <= level) boundary = k
+        }
+        leavesLevelIndexes.push(boundary)
+    }
+
+    return {
+        leaves: indices.map((idx) => tree.leaves[idx]),
+        leafIndexes: indices,
+        leavesLevelIndexes,
+        siblings
+    }
 }
 
 export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
@@ -766,48 +806,80 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 it("Should verify a single leaf (degenerate multiproof)", async () => {
                     await insertRange(1)
 
-                    const { leaves, indices, siblings } = generateMultiProof(jsLeanIMT, [0])
-                    expect(await skinnyIMTTest.verifyMany(leaves, indices, siblings)).to.equal(true)
+                    const { leaves, leafIndexes, leavesLevelIndexes, siblings } = generateMultiProof(jsLeanIMT, [0])
+                    expect(await skinnyIMTTest.verifyMany(leaves, leafIndexes, leavesLevelIndexes, siblings)).to.equal(
+                        true
+                    )
                 })
 
                 it("Should verify several leaves in a balanced tree", async () => {
                     await insertRange(8)
 
-                    const { leaves, indices, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
-                    expect(await skinnyIMTTest.verifyMany(leaves, indices, siblings)).to.equal(true)
+                    const { leaves, leafIndexes, leavesLevelIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
+                    expect(await skinnyIMTTest.verifyMany(leaves, leafIndexes, leavesLevelIndexes, siblings)).to.equal(
+                        true
+                    )
                 })
 
                 it("Should verify adjacent leaves that share a parent", async () => {
                     await insertRange(8)
 
                     // 2 and 3 pair directly, so no sibling is supplied between them.
-                    const { leaves, indices, siblings } = generateMultiProof(jsLeanIMT, [2, 3])
-                    expect(await skinnyIMTTest.verifyMany(leaves, indices, siblings)).to.equal(true)
+                    const { leaves, leafIndexes, leavesLevelIndexes, siblings } = generateMultiProof(jsLeanIMT, [2, 3])
+                    expect(await skinnyIMTTest.verifyMany(leaves, leafIndexes, leavesLevelIndexes, siblings)).to.equal(
+                        true
+                    )
                 })
 
                 it("Should verify every leaf with an empty sibling list", async () => {
                     await insertRange(8)
 
                     const all = new Array(8).fill(0).map((_, i) => i)
-                    const { leaves, indices, siblings } = generateMultiProof(jsLeanIMT, all)
+                    const { leaves, leafIndexes, leavesLevelIndexes, siblings } = generateMultiProof(jsLeanIMT, all)
                     // When all leaves are supplied, nothing is left to provide.
                     expect(siblings.length).to.equal(0)
-                    expect(await skinnyIMTTest.verifyMany(leaves, indices, siblings)).to.equal(true)
+                    expect(await skinnyIMTTest.verifyMany(leaves, leafIndexes, leavesLevelIndexes, siblings)).to.equal(
+                        true
+                    )
                 })
 
                 it("Should verify a dangling right-edge leaf in an odd-sized tree", async () => {
-                    // 3 leaves: index 2 dangles at level 0 (no leaf 3).
+                    // 3 leaves: leaf 2 dangles, so it sits above level 0.
                     await insertRange(3)
 
-                    const { leaves, indices, siblings } = generateMultiProof(jsLeanIMT, [0, 2])
-                    expect(await skinnyIMTTest.verifyMany(leaves, indices, siblings)).to.equal(true)
+                    const { leaves, leafIndexes, leavesLevelIndexes, siblings } = generateMultiProof(jsLeanIMT, [0, 2])
+                    expect(await skinnyIMTTest.verifyMany(leaves, leafIndexes, leavesLevelIndexes, siblings)).to.equal(
+                        true
+                    )
                 })
 
                 it("Should verify a spread-out batch in a non-power-of-two tree", async () => {
+                    // size 13: leaf 12 (the last leaf) dangles and sits at level 2 -> [11,11,12,12,12].
                     await insertRange(13)
 
-                    const { leaves, indices, siblings } = generateMultiProof(jsLeanIMT, [0, 5, 9, 12])
-                    expect(await skinnyIMTTest.verifyMany(leaves, indices, siblings)).to.equal(true)
+                    const { leaves, leafIndexes, leavesLevelIndexes, siblings } = generateMultiProof(
+                        jsLeanIMT,
+                        [0, 5, 9, 12]
+                    )
+                    expect(await skinnyIMTTest.verifyMany(leaves, leafIndexes, leavesLevelIndexes, siblings)).to.equal(
+                        true
+                    )
+                })
+
+                it("Should verify four odd-indexed leaves scattered across a size-12 tree", async () => {
+                    // size 12 (even leaf count, edgeIndex 11 is odd) -> nothing dangles, so every leaf
+                    // including 11 sits at level 0. Indexes 1,3,9,11 are all right children at level 0.
+                    await insertRange(12)
+
+                    const { leaves, leafIndexes, leavesLevelIndexes, siblings } = generateMultiProof(
+                        jsLeanIMT,
+                        [1, 3, 9, 11]
+                    )
+                    // flat leavesLevelIndexes == no deferral (all four enter at level 0)
+                    expect(leavesLevelIndexes).to.deep.equal([3, 3, 3, 3, 3])
+                    expect(await skinnyIMTTest.verifyMany(leaves, leafIndexes, leavesLevelIndexes, siblings)).to.equal(
+                        true
+                    )
                 })
 
                 it("Should match a batch built after inserts and an update", async () => {
@@ -816,137 +888,72 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                     const { siblings: updateSiblings } = jsLeanIMT.generateProof(2)
                     await skinnyIMTTest.update(3, 0, 2, updateSiblings)
 
-                    const { leaves, indices, siblings } = generateMultiProof(jsLeanIMT, [1, 2, 4])
-                    // The updated leaf is now 0; the multiproof should still verify.
+                    const { leaves, leafIndexes, leavesLevelIndexes, siblings } = generateMultiProof(
+                        jsLeanIMT,
+                        [1, 2, 4]
+                    )
+                    // None is the last leaf, so all three sit at level 0; index 2 is now 0.
                     expect(leaves[1]).to.equal(0n)
-                    expect(await skinnyIMTTest.verifyMany(leaves, indices, siblings)).to.equal(true)
+                    expect(await skinnyIMTTest.verifyMany(leaves, leafIndexes, leavesLevelIndexes, siblings)).to.equal(
+                        true
+                    )
                 })
 
                 it("Should return false when a leaf value is wrong", async () => {
                     await insertRange(8)
 
-                    const { leaves, indices, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
+                    const { leaves, leafIndexes, leavesLevelIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
                     const tampered = [...leaves]
                     tampered[0] = leaves[0] + 1n
-                    expect(await skinnyIMTTest.verifyMany(tampered, indices, siblings)).to.equal(false)
+                    expect(
+                        await skinnyIMTTest.verifyMany(tampered, leafIndexes, leavesLevelIndexes, siblings)
+                    ).to.equal(false)
                 })
 
                 it("Should return false when a sibling is wrong", async () => {
                     await insertRange(8)
 
-                    const { leaves, indices, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
+                    const { leaves, leafIndexes, leavesLevelIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
                     const tampered = [...siblings]
                     tampered[0] = siblings[0] + 1n
-                    expect(await skinnyIMTTest.verifyMany(leaves, indices, tampered)).to.equal(false)
-                })
-
-                it("Should verify explicitly against the current root and size", async () => {
-                    await insertRange(8)
-
-                    const { leaves, indices, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
-                    const root = await skinnyIMTTest.root()
-                    const size = await skinnyIMTTest.size()
-                    expect(await skinnyIMTTest.verifyManyAgainstRoot(root, size, leaves, indices, siblings)).to.equal(
-                        true
+                    expect(await skinnyIMTTest.verifyMany(leaves, leafIndexes, leavesLevelIndexes, tampered)).to.equal(
+                        false
                     )
                 })
 
-                it("Should verify a batch against a historical root after the tree has grown", async () => {
-                    await insertRange(8)
-                    const historicalRoot = await skinnyIMTTest.root()
-                    const historicalSize = await skinnyIMTTest.size()
+                // NOTE: out-of-range and unsorted indexes are intentionally NOT rejected —
+                // neither can forge a false membership (a scrambled climb just yields a
+                // non-matching root -> false, or reverts on an out-of-bounds read). Length
+                // and sibling-count well-formedness ARE enforced: a surplus leafIndex or a
+                // leftover sibling would let a caller believe something was proven that never
+                // actually entered a hash.
 
-                    // Capture the proof while the tree has 8 leaves...
-                    const { leaves, indices, siblings } = generateMultiProof(jsLeanIMT, [1, 4, 6])
-
-                    // ...then grow the tree so the current root moves on.
-                    const more = [9n, 10n, 11n, 12n, 13n]
-                    jsLeanIMT.insertMany(more)
-                    await skinnyIMTTest.insertMany(more)
-
-                    expect(await skinnyIMTTest.root()).to.not.equal(historicalRoot)
-                    // The captured proof still reconstructs the historical root.
-                    expect(
-                        await skinnyIMTTest.verifyManyAgainstRoot(
-                            historicalRoot,
-                            historicalSize,
-                            leaves,
-                            indices,
-                            siblings
-                        )
-                    ).to.equal(true)
-                })
-
-                it("Should return false against a root the batch doesn't belong to", async () => {
+                it("Should revert when leaves and leafIndexes lengths differ", async () => {
                     await insertRange(8)
 
-                    const { leaves, indices, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
-                    const size = await skinnyIMTTest.size()
-                    const tampered = [...leaves]
-                    tampered[0] = leaves[0] + 1n
-                    expect(
-                        await skinnyIMTTest.verifyManyAgainstRoot(
-                            await skinnyIMTTest.root(),
-                            size,
-                            tampered,
-                            indices,
-                            siblings
-                        )
-                    ).to.equal(false)
-                })
-
-                it("Should revert when an index is out of range", async () => {
-                    await insertRange(4)
-
-                    // index 9 doesn't exist in a 4-leaf tree.
+                    const { leaves, leafIndexes, leavesLevelIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
+                    // More indexes than leaves: without a length guard the surplus index is
+                    // silently never folded, so a caller would think it was proven when it wasn't.
                     await expect(
-                        skinnyIMTTest.verifyMany([jsLeanIMT.leaves[0]], [9], [])
+                        skinnyIMTTest.verifyMany(leaves, [...leafIndexes, 5], leavesLevelIndexes, siblings)
                     ).to.be.revertedWithCustomError(skinnyIMT, "WrongMultiProof")
-                })
-
-                it("Should revert when indices are not strictly increasing", async () => {
-                    await insertRange(8)
-
-                    const { leaves, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
-                    // Indices out of order — the pairing logic is undefined.
-                    await expect(skinnyIMTTest.verifyMany(leaves, [4, 1], siblings)).to.be.revertedWithCustomError(
-                        skinnyIMT,
-                        "WrongMultiProof"
-                    )
                 })
 
                 it("Should revert when an extra sibling is supplied", async () => {
                     await insertRange(8)
 
-                    const { leaves, indices, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
+                    const { leaves, leafIndexes, leavesLevelIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
+                    // A leftover sibling is a node the proof never hashes against anything, so
+                    // it is never checked to be part of the tree — reject rather than ignore it.
                     await expect(
-                        skinnyIMTTest.verifyMany(leaves, indices, [...siblings, 123n])
+                        skinnyIMTTest.verifyMany(leaves, leafIndexes, leavesLevelIndexes, [...siblings, 123n])
                     ).to.be.revertedWithCustomError(skinnyIMT, "WrongMultiProof")
-                })
-
-                it("Should revert when a sibling is missing", async () => {
-                    await insertRange(8)
-
-                    const { leaves, indices, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
-                    await expect(
-                        skinnyIMTTest.verifyMany(leaves, indices, siblings.slice(0, -1))
-                    ).to.be.revertedWithCustomError(skinnyIMT, "WrongMultiProof")
-                })
-
-                it("Should revert when leaves and indices lengths differ", async () => {
-                    await insertRange(8)
-
-                    const { leaves, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
-                    await expect(skinnyIMTTest.verifyMany(leaves, [1], siblings)).to.be.revertedWithCustomError(
-                        skinnyIMT,
-                        "WrongMultiProof"
-                    )
                 })
 
                 it("Should revert when the batch is empty", async () => {
                     await insertRange(8)
 
-                    await expect(skinnyIMTTest.verifyMany([], [], [])).to.be.revertedWithCustomError(
+                    await expect(skinnyIMTTest.verifyMany([], [], [], [])).to.be.revertedWithCustomError(
                         skinnyIMT,
                         "WrongMultiProof"
                     )
@@ -956,12 +963,99 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                     it("Should reject a leaf >= SNARK_SCALAR_FIELD", async () => {
                         await insertRange(8)
 
-                        const { indices, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
+                        const { leafIndexes, leavesLevelIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
                         await expect(
-                            skinnyIMTTest.verifyMany([1, SNARK_SCALAR_FIELD], indices, siblings)
+                            skinnyIMTTest.verifyMany(
+                                [1n, SNARK_SCALAR_FIELD],
+                                leafIndexes,
+                                leavesLevelIndexes,
+                                siblings
+                            )
                         ).to.be.revertedWithCustomError(skinnyIMT, "LeafGreaterThanSnarkScalarField")
                     })
                 }
+
+                // These tests exist because the multiproof once trusted the caller-supplied
+                // `leavesLevelIndexes` / `leafIndexes` without checking them against the tree, so
+                // the caller could choose at which level each claimed leaf was injected. A leaf
+                // injected above level 0 was folded upward WITHOUT being hashed from the bottom,
+                // and there is no leaf/internal domain separation — which allowed the forgeries
+                // below (plus one honest proof being wrongly rejected). Each test pins the fix.
+
+                it("Should reject an internal-node value passed off as a leaf", async () => {
+                    // Forgery (fixed): in tree [1,2,3,4], N23 = H(3,4) is an INTERNAL node, not a leaf.
+                    // Deferring a second claim to level 1 (leavesLevelIndexes = [0,1,1]) injected N23
+                    // straight in at level 1 and folded it up, never hashing it from level 0: carrier
+                    // leaf 1@0 + sibling 2 -> H(1,2), then N23 pairs with it -> the real root. verifyMany
+                    // returned true, certifying N23 as the leaf at index 2 (whose real leaf is 3).
+                    // The fix rejects it: index 2 is not the tree's edge (3), so N23 cannot be deferred.
+                    await insertRange(4)
+                    const N23 = hashFn(3n, 4n)
+                    await expect(
+                        skinnyIMTTest.verifyMany([1n, N23], [0, 2], [0, 1, 1], [2n])
+                    ).to.be.revertedWithCustomError(skinnyIMT, "WrongMultiProof")
+                })
+
+                it("Should reject the dangling edge leaf claimed at a wrong index", async () => {
+                    // Forgery (fixed): in tree [1,2,3,4,5], leaf 5 (index 4) dangles and first pairs at
+                    // level 2, so its position was only ever read as index>>2 — the low 2 bits of the
+                    // claimed index were never checked. The honest proof of 5@4 therefore verified
+                    // unchanged for indexes 5/6/7 (all share 4>>2 == 1), forging the leaf's position.
+                    await insertRange(5)
+                    const honest = generateMultiProof(jsLeanIMT, [0, 4])
+
+                    // the genuine proof (leaf 5 really at index 4) still verifies
+                    expect(
+                        await skinnyIMTTest.verifyMany(
+                            honest.leaves,
+                            honest.leafIndexes,
+                            honest.leavesLevelIndexes,
+                            honest.siblings
+                        )
+                    ).to.equal(true)
+
+                    // same proof with the claimed index changed to 5 (which does not exist) is now rejected:
+                    // a deferred leaf's index must equal edgeIndex (4), so 5 no longer slips through.
+                    await expect(
+                        skinnyIMTTest.verifyMany(honest.leaves, [0, 5], honest.leavesLevelIndexes, honest.siblings)
+                    ).to.be.revertedWithCustomError(skinnyIMT, "WrongMultiProof")
+                })
+
+                it("Should reject an internal node smuggled into a larger (3-leaf) batch", async () => {
+                    // The confirmed forgeries used 2-leaf batches; this checks the guard is batch-size
+                    // agnostic. In tree [1..8], N56 = H(5,6) is an internal node. Deferring it to level 1
+                    // (leavesLevelIndexes = [0,1,1,1]) between genuine carriers once folded to the real
+                    // root; the guard now rejects it because its index (4) is not the tree's edge (7).
+                    await insertRange(8)
+                    const N56 = hashFn(5n, 6n)
+                    await expect(
+                        skinnyIMTTest.verifyMany([1n, N56, 8n], [0, 4, 7], [0, 1, 1, 1], [2n, hashFn(7n, 8n)])
+                    ).to.be.revertedWithCustomError(skinnyIMT, "WrongMultiProof")
+                })
+
+                it("Should reject the edge leaf deferred above the level it dangles to", async () => {
+                    // In tree [1,2,3,4,5] the edge leaf 5 (index 4) genuinely dangles only to level 2.
+                    // Deferring it to level 3 would fold its value in as if it were the (internal) node
+                    // above its dangle point. index==edgeIndex alone would allow this, so the low-bits
+                    // half of the guard rejects it: index 4 still has a set bit below level 3.
+                    await insertRange(5)
+                    await expect(
+                        skinnyIMTTest.verifyMany([1n, 5n], [0, 4], [0, 0, 0, 1], [2n, hashFn(3n, 4n), 5n])
+                    ).to.be.revertedWithCustomError(skinnyIMT, "WrongMultiProof")
+                })
+
+                it("Should accept an honest proof of two paired leaves in an odd tree", async () => {
+                    // Completeness bug (fixed): in tree [1,2,3], the honest proof of members {0,1}. At level
+                    // 1 the lone live node H(1,2) is an even non-edge node; the pair look-ahead was bounded
+                    // by the ALLOCATED array length instead of the live node count, so it mis-paired with a
+                    // STALE slot left from level 0, skipped the real sibling (3), and tripped the
+                    // sibling-count guard — reverting this perfectly valid proof.
+                    await insertRange(3)
+                    const { leaves, leafIndexes, leavesLevelIndexes, siblings } = generateMultiProof(jsLeanIMT, [0, 1])
+                    expect(await skinnyIMTTest.verifyMany(leaves, leafIndexes, leavesLevelIndexes, siblings)).to.equal(
+                        true
+                    )
+                })
             })
         }
 

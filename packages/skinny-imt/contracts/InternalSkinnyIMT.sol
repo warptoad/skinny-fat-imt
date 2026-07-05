@@ -36,6 +36,15 @@ struct SkinnyIMTFullNodeData {
     SkinnyIMTData skinnyData;
 }
 
+struct MultiProof {
+    uint256 treeDepth;
+    uint256 edgeIndex;
+    uint256[] leaves;
+    uint256[] leafIndexes;
+    uint256[] leavesLevelIndexes;
+    uint256[] proofSiblings;
+}
+
 error WrongSiblingNodes();
 error LeafDoesNotExist();
 error NotInitialized();
@@ -539,19 +548,19 @@ library InternalSkinnyIMT {
     /// @param oldLeaf: The value of the leaf that is to be updated.
     /// @param newLeaf: The new value that will replace the oldLeaf in the tree.
     /// @param leafIndex: The index of the leaf to be updated.
-    /// @param siblingNodes: An array of sibling nodes that are necessary to recalculate the path to the root.
+    /// @param proofSiblings: An array of sibling nodes that are necessary to recalculate the path to the root.
     /// @return The new hash of the updated node after the leaf has been updated.
     /// @notice Requires collision-resistant hashing: `if (self.sideNodes[level] == oldRoot)` identifies
     /// which sideNode to refresh by hash equality,
     /// so a collision between two distinct subtree roots would corrupt tree state silently.
     /// @notice Contracts using this function with snark based hash functions,
-    /// need to check that the old and newLeaf and siblingNodes are within the snark scalar field.
+    /// need to check that the old and newLeaf and proofSiblings are within the snark scalar field.
     function _update(
         SkinnyIMTData storage self,
         uint256 oldLeaf,
         uint256 newLeaf,
         uint256 leafIndex,
-        uint256[] calldata siblingNodes,
+        uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
         if (_isInitialized(self) == false) {
@@ -559,7 +568,7 @@ library InternalSkinnyIMT {
         }
         // Cache tree depth to optimize gas
         uint256 treeDepth = self.depth;
-        if (siblingNodes.length > treeDepth) {
+        if (proofSiblings.length > treeDepth) {
             revert WrongSiblingNodes();
         }
 
@@ -571,11 +580,11 @@ library InternalSkinnyIMT {
         // tracking this index up the tree, follows the indexes of the nodes in self.sidNodes
         uint256 edgeIndex = self.size - 1;
 
-        // because leanIMT is not balanced siblingNodes.length can be smaller then tree depth
+        // because leanIMT is not balanced proofSiblings.length can be smaller then tree depth
         // we cant just use level so we separately track those 2
         uint256 siblingIndex = 0;
 
-        // verify merkle proof of oldLeaf from siblingNodes
+        // verify merkle proof of oldLeaf from proofSiblings
         // and at the same time calculate the newRoot
 
         // note: this is basically just _proofToRoot twice on old and new leaf, then assert root from oldLeaf is
@@ -585,8 +594,8 @@ library InternalSkinnyIMT {
             if ((leafIndex >> level) & 1 == 1) {
                 // no newNode to store in sideNodes to store here, the next insert does not need it if it already
                 // has a sibling
-                newNode = hasher([siblingNodes[siblingIndex], newNode]);
-                oldNode = hasher([siblingNodes[siblingIndex], oldNode]);
+                newNode = hasher([proofSiblings[siblingIndex], newNode]);
+                oldNode = hasher([proofSiblings[siblingIndex], oldNode]);
 
                 unchecked {
                     ++siblingIndex;
@@ -604,8 +613,8 @@ library InternalSkinnyIMT {
                         self.sideNodes[level] = newNode;
                     }
 
-                    newNode = hasher([newNode, siblingNodes[siblingIndex]]);
-                    oldNode = hasher([oldNode, siblingNodes[siblingIndex]]);
+                    newNode = hasher([newNode, proofSiblings[siblingIndex]]);
+                    oldNode = hasher([oldNode, proofSiblings[siblingIndex]]);
 
                     unchecked {
                         ++siblingIndex;
@@ -632,36 +641,34 @@ library InternalSkinnyIMT {
     /// @dev Hashes merkle proof and returns the root the leaf belongs to
     /// @param leafIndex: The leaf to proof inclusion of
     /// @param leafIndex: The index of the leaf within the tree.
-    /// @param siblingNodes: The sibling nodes along the path from the leaf to the root.
+    /// @param proofSiblings: The sibling nodes along the path from the leaf to the root.
     /// @return The root obtained from hashing the leaf with the provided siblings.
     /// @notice Contracts using this function with snark based hash functions,
-    /// need to check that the leaf and siblingNodes are within the snark scalar field.
+    /// need to check that the leaf and proofSiblings are within the snark scalar field.
     function _proofToRoot(
-        uint256 leaf,
-        uint256 leafIndex,
         uint256 treeDepth,
         uint256 treeSize,
-        uint256[] calldata siblingNodes,
+        uint256 leaf,
+        uint256 leafIndex,
+        uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal view returns (uint256) {
         if (treeSize == 0) {
             revert TreeEmpty();
-        } else if (siblingNodes.length > treeDepth) {
-            revert WrongSiblingNodes();
         }
 
         // index of the very last leaf in the tree
         // tracking this index up the tree, follows the indexes of the nodes in self.sidNodes
         uint256 edgeIndex = treeSize - 1;
 
-        // because leanIMT is not balanced siblingNodes.length can be smaller then tree depth
+        // because leanIMT is not balanced proofSiblings.length can be smaller then tree depth
         // we cant just use level so we separately track those 2
         uint256 siblingIndex = 0;
 
         uint256 node = leaf;
         for (uint256 level = 0; level < treeDepth; ) {
             if ((leafIndex >> level) & 1 == 1) {
-                node = hasher([siblingNodes[siblingIndex], node]);
+                node = hasher([proofSiblings[siblingIndex], node]);
 
                 unchecked {
                     ++siblingIndex;
@@ -669,7 +676,7 @@ library InternalSkinnyIMT {
             } else {
                 // make sure node index is not at the edge @TODO explain
                 if (leafIndex >> level != edgeIndex >> level) {
-                    node = hasher([node, siblingNodes[siblingIndex]]);
+                    node = hasher([node, proofSiblings[siblingIndex]]);
 
                     unchecked {
                         ++siblingIndex;
@@ -684,246 +691,150 @@ library InternalSkinnyIMT {
         return node;
     }
 
-    // /// @dev The state a multiproof carries as it climbs the tree, one level at a
-    // /// time. Passed to `_climbMultiProofLevel` by reference so that helper costs a
-    // /// single stack slot instead of three separate ones — the function-type
-    // /// `hasher` and the calldata sibling stream already crowd its stack frame.
-    // struct MultiProofState {
-    //     // The positions, at the current level, of the nodes we already know.
-    //     // Always kept in ascending order. As we climb, each entry is overwritten
-    //     // with its parent's position: a level never has more parents than
-    //     // children, and a parent is always written behind the node we are reading,
-    //     // so the in-place overwrite never clobbers a child we still need.
-    //     uint256[] knownPositions;
-    //     // The values of those known nodes, overwritten with their parents' values
-    //     // in lock-step with `knownPositions`.
-    //     uint256[] knownValues;
-    //     // How many entries of `knownPositions` / `knownValues` are live this level.
-    //     uint256 knownCount;
-    // }
+    struct MultiProofLevelState {
+        uint256[] currentNodes;
+        uint256[] currentPositions;
+        uint256[] nextNodes;
+        uint256[] nextPositions;
+    }
 
-    // /// @dev Climbs the multiproof up one level: reads the known nodes at the
-    // /// current level and writes their parents (in place) for the next level up.
-    // ///
-    // /// `levelSize` is the number of nodes the whole tree has at this level
-    // /// (ceil of size over 2 per level climbed), so it marks where the tree's
-    // /// right edge sits. Walking the known nodes from left to right, each one is
-    // /// a left child (even position) or a right child (odd position), and its
-    // /// sibling is found in one of three places:
-    // ///   dangle: the node is the rightmost of the level, so its right-sibling
-    // ///           position lands past the edge and no sibling exists. A dangling
-    // ///           node has no one to hash with — its parent is the node carried up
-    // ///           unchanged (the tree's zero-less parent rule). No sibling spent.
-    // ///   pair:   the very next known node is exactly its right sibling. The two
-    // ///           combine directly, so again no proof sibling is spent.
-    // ///   proof:  anything else — the missing sibling is read from the flat
-    // ///           `siblings` stream at `siblingCursor`.
-    // /// A right child always lands in the `proof` case: were its left sibling a
-    // /// known node, that node (sitting to its left) would have consumed this one
-    // /// as its `pair` earlier in the walk.
-    // ///
-    // /// @param state Climbing state; `state.knownCount` is updated to the parent count.
-    // /// @param levelSize Node count of the tree at this level; marks the right edge.
-    // /// @param siblingCursor How many entries of `siblings` have been spent so far.
-    // /// @param siblings The flat, bottom-up / left-to-right proof-sibling stream.
-    // /// @return The sibling cursor after this level's siblings are spent.
-    // /// @notice Reverts `WrongMultiProof` if a node needs a proof sibling but the
-    // /// stream is already exhausted.
-    // function _climbMultiProofLevel(
-    //     MultiProofState memory state,
-    //     uint256 levelSize,
-    //     uint256 siblingCursor,
-    //     uint256[] calldata siblings,
-    //     function(uint256[2] memory) view returns (uint256) hasher
-    // ) private view returns (uint256) {
-    //     // `readCursor` walks the known nodes (the children) left to right;
-    //     // `parentCount` is where we write the next parent and, at the end, the
-    //     // number of parents produced. parentCount always trails readCursor, which
-    //     // is why overwriting the arrays in place is safe.
-    //     uint256 parentCount = 0;
-    //     uint256 readCursor = 0;
-    //     while (readCursor < state.knownCount) {
-    //         uint256 childPosition = state.knownPositions[readCursor];
-    //         uint256 childValue = state.knownValues[readCursor];
+    struct MultiProofArrLevelPositions {
+        uint256 currentNodesFreeSlot;
+        uint256 nextNodesFreeSlot;
+        uint256 leavesReadPos;
+        uint256 proofSiblingsReadPos;
+        uint256 edgePos;
+    }
 
-    //         if (childPosition & 1 == 0) {
-    //             // -------------- left child (even position) --------------
-    //             if (childPosition + 1 >= levelSize) {
-    //                 // dangle: this is the rightmost node of the level, it has no
-    //                 // right sibling, so the parent is just this node carried up.
-    //                 state.knownValues[parentCount] = childValue;
-    //             } else if (
-    //                 readCursor + 1 < state.knownCount &&
-    //                 state.knownPositions[readCursor + 1] == childPosition + 1
-    //             ) {
-    //                 // pair: the next known node is this node's right sibling.
-    //                 state.knownValues[parentCount] = hasher([childValue, state.knownValues[readCursor + 1]]);
-    //                 // Consume that sibling too, so we don't visit it as its own node.
-    //                 unchecked {
-    //                     ++readCursor;
-    //                 }
-    //             } else {
-    //                 // proof: the right sibling comes from the flat stream.
-    //                 if (siblingCursor >= siblings.length) {
-    //                     revert WrongMultiProof();
-    //                 }
-    //                 state.knownValues[parentCount] = hasher([childValue, siblings[siblingCursor]]);
-    //                 unchecked {
-    //                     ++siblingCursor;
-    //                 }
-    //             }
-    //         } else {
-    //             // -------------- right child (odd position) --------------
-    //             // Its left sibling is always a proof sibling: a known left sibling
-    //             // would have paired with this node back when we visited it.
-    //             if (siblingCursor >= siblings.length) {
-    //                 revert WrongMultiProof();
-    //             }
-    //             state.knownValues[parentCount] = hasher([siblings[siblingCursor], childValue]);
-    //             unchecked {
-    //                 ++siblingCursor;
-    //             }
-    //         }
+    function _hashMultiProofLevel(
+        MultiProof memory proof,
+        MultiProofLevelState memory levelState,
+        MultiProofArrLevelPositions memory levelPositions,
+        uint256 level,
+        function(uint256[2] memory) view returns (uint256) hasher
+    ) private view returns (MultiProofLevelState memory, MultiProofArrLevelPositions memory) {
+        // copy new leaves and indexes for this level
+        {
+            uint256 amountNewLeaves = proof.leavesLevelIndexes[level] + 1 - levelPositions.leavesReadPos;
+            for (uint256 i = 0; i < amountNewLeaves; i++) {
+                uint256 leafIndex = proof.leafIndexes[levelPositions.leavesReadPos + i];
 
-    //         // The parent sits one level up at half this node's position.
-    //         state.knownPositions[parentCount] = childPosition >> 1;
-    //         unchecked {
-    //             ++parentCount;
-    //             ++readCursor;
-    //         }
-    //     }
+                // Leaves above level 0 (who dangle), get skipped on lower levels
+                // But their indexes still get halved (bit shifted) every move up. This cause the exact index to be lost
+                // To verify that the index is the original and not something that happens to line up when bit shifted
+                // to the current level.
+                // we do: (leafIndex >> level) << level
+                // This
+                if (level != 0 && (leafIndex != proof.edgeIndex || (leafIndex >> level) << level != leafIndex)) {
+                    revert WrongMultiProof();
+                }
 
-    //     state.knownCount = parentCount;
-    //     return siblingCursor;
-    // }
+                levelState.currentNodes[levelPositions.currentNodesFreeSlot + i] = proof.leaves[
+                    levelPositions.leavesReadPos + i
+                ];
+                levelState.currentPositions[levelPositions.currentNodesFreeSlot + i] = leafIndex >> level;
+            }
+            levelPositions.currentNodesFreeSlot += amountNewLeaves;
+            levelPositions.leavesReadPos = proof.leavesLevelIndexes[level] + 1;
+        }
 
-    // /// @dev Recomputes the root a shared (deduplicated) Merkle multiproof implies —
-    // /// the many-leaf analog of `_rootFromSiblings`. Whether each node hashes on its
-    // /// left or right is read from its index; where nodes dangle (the tree's right
-    // /// edge) is read from `size`. It touches no tree state, so the very same proof
-    // /// rebuilds whichever root the inputs describe: pass the current `size` (and
-    // /// compare against the current root) for a present-day check, or a past `size`
-    // /// for a historical root. `siblings` is the flat, bottom-up / left-to-right
-    // /// list of exactly the nodes that can't be derived from the supplied leaves.
-    // ///
-    // /// @notice `indices` must be strictly increasing (which also makes them
-    // /// unique); `leaves[proofLeaf]` is the value claimed at `indices[proofLeaf]`.
-    // /// @notice Contracts using this function with snark based hash functions,
-    // /// need to check that the leaves and siblings are within the snark scalar field.
-    // /// @notice Reverts `WrongMultiProof` on a structurally malformed proof (empty
-    // /// or length-mismatched inputs, non-increasing or out-of-range indices, or the
-    // /// wrong number of siblings). A well-formed proof carrying wrong values simply
-    // /// rebuilds a different (non-matching) root.
-    // /// @param leaves: The leaf values, ordered by ascending index.
-    // /// @param indices: The strictly-increasing indices of `leaves`.
-    // /// @param siblings: Flat sibling list, bottom-up and left-to-right.
-    // /// @param size: The leaf count of the tree whose root is being rebuilt.
-    // /// @return The root implied by the proof.
-    // function _rootFromMultiProof(
-    //     uint256[] calldata leaves,
-    //     uint256[] calldata indices,
-    //     uint256[] calldata siblings,
-    //     uint256 size,
-    //     function(uint256[2] memory) view returns (uint256) hasher
-    // ) internal view returns (uint256) {
-    //     // Seed the climb's level 0 with the supplied leaves. The leaf and index
-    //     // calldata arrays are only read here, so this setup lives in its own block
-    //     // and the struct `state` carries everything the climb needs afterwards —
-    //     // the same slot-freeing trick `_insertManyRepeated` uses for its counters.
-    //     MultiProofState memory state;
-    //     {
-    //         uint256 leafCount = leaves.length;
-    //         if (leafCount == 0 || leafCount != indices.length) {
-    //             revert WrongMultiProof();
-    //         }
-    //         // The largest index must name a leaf that exists in a tree this size.
-    //         if (indices[leafCount - 1] >= size) {
-    //             revert WrongMultiProof();
-    //         }
-    //         state.knownPositions = new uint256[](leafCount);
-    //         state.knownValues = new uint256[](leafCount);
-    //         for (uint256 proofLeaf = 0; proofLeaf < leafCount; ) {
-    //             // Strictly increasing indices keep the left-to-right pairing in
-    //             // `_climbMultiProofLevel` well defined: siblings sit side by side.
-    //             if (proofLeaf != 0 && indices[proofLeaf] <= indices[proofLeaf - 1]) {
-    //                 revert WrongMultiProof();
-    //             }
-    //             state.knownPositions[proofLeaf] = indices[proofLeaf];
-    //             state.knownValues[proofLeaf] = leaves[proofLeaf];
-    //             unchecked {
-    //                 ++proofLeaf;
-    //             }
-    //         }
-    //         state.knownCount = leafCount;
-    //     }
+        for (uint256 i = 0; i < levelPositions.currentNodesFreeSlot; i++) {
+            // hash left or right
+            if (levelState.currentPositions[i] & 1 == 1) {
+                if (i != 0 && (levelState.currentPositions[i - 1] == (levelState.currentPositions[i] - 1))) {
+                    // last node in currentNodes is a sibling, skip now so we hashed it already
+                    continue;
+                }
+                levelState.nextNodes[levelPositions.nextNodesFreeSlot] = hasher(
+                    [proof.proofSiblings[levelPositions.proofSiblingsReadPos], levelState.currentNodes[i]]
+                );
+                levelState.nextPositions[levelPositions.nextNodesFreeSlot] = levelState.currentPositions[i] >> 1;
 
-    //     // Climb one tree level per iteration. `levelSize` is the node count at the
-    //     // current level; it shrinks (rounding up, because an odd node dangles into
-    //     // the next level) until the tree holds a single node — the root — at which
-    //     // point the known nodes have collapsed onto that same node. `siblingCursor`
-    //     // threads through every level so siblings are spent in one continuous order.
-    //     uint256 siblingCursor = 0;
-    //     uint256 levelSize = size;
-    //     while (levelSize > 1) {
-    //         siblingCursor = _climbMultiProofLevel(state, levelSize, siblingCursor, siblings, hasher);
-    //         levelSize = (levelSize + 1) >> 1;
-    //     }
+                unchecked {
+                    ++levelPositions.nextNodesFreeSlot;
+                    ++levelPositions.proofSiblingsReadPos;
+                }
+            } else {
+                // make sure node index is not at the edge because edges should be carried up a level
+                // TODO these variable names are so long the auto format makes the code unreadable
+                if (levelState.currentPositions[i] != levelPositions.edgePos) {
+                    if (
+                        (i + 1) < levelPositions.currentNodesFreeSlot &&
+                        (levelState.currentPositions[i + 1] == (levelState.currentPositions[i] + 1))
+                    ) {
+                        // sibling is in currentNodes to the left, so use that instead
+                        levelState.nextNodes[levelPositions.nextNodesFreeSlot] = hasher(
+                            [levelState.currentNodes[i], levelState.currentNodes[i + 1]]
+                        );
+                        levelState.nextPositions[levelPositions.nextNodesFreeSlot] =
+                            levelState.currentPositions[i] >>
+                            1;
+                    } else {
+                        levelState.nextNodes[levelPositions.nextNodesFreeSlot] = hasher(
+                            [levelState.currentNodes[i], proof.proofSiblings[levelPositions.proofSiblingsReadPos]]
+                        );
+                        levelState.nextPositions[levelPositions.nextNodesFreeSlot] =
+                            levelState.currentPositions[i] >>
+                            1;
 
-    //     // A valid proof collapses to exactly the root and spends every sibling it
-    //     // supplied — a leftover count (too many) or an early stop (too few) both
-    //     // mean the proof was malformed.
-    //     if (state.knownCount != 1 || siblingCursor != siblings.length) {
-    //         revert WrongMultiProof();
-    //     }
-    //     return state.knownValues[0];
-    // }
+                        unchecked {
+                            ++levelPositions.proofSiblingsReadPos;
+                        }
+                    }
+                } else {
+                    // it's an edge not and should be carried up a level. (TODO verify this is true claude claimed this)
+                    levelState.nextNodes[levelPositions.nextNodesFreeSlot] = levelState.currentNodes[i];
+                    levelState.nextPositions[levelPositions.nextNodesFreeSlot] = levelState.currentPositions[i] >> 1;
+                }
+                ++levelPositions.nextNodesFreeSlot;
+            }
+        }
+
+        // per level updates
+        levelPositions.edgePos >>= 1;
+
+        for (uint256 k = 0; k < levelPositions.nextNodesFreeSlot; k++) {
+            levelState.currentNodes[k] = levelState.nextNodes[k];
+            levelState.currentPositions[k] = levelState.nextPositions[k];
+        }
+        levelPositions.currentNodesFreeSlot = levelPositions.nextNodesFreeSlot;
+        levelPositions.nextNodesFreeSlot = 0;
+        return (levelState, levelPositions);
+    }
 
     function _proofManyToRoot(
-        uint256[][] calldata leaves,
-        uint256[] calldata indexes,
-        uint256[] calldata siblingNodes,
-        uint256 size,
+        MultiProof memory proof,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal view returns (uint256) {}
+    ) internal view returns (uint256) {
+        uint256 leafCount = proof.leaves.length;
+        if (leafCount == 0 || leafCount != proof.leafIndexes.length) {
+            revert WrongMultiProof();
+        }
 
-    //     uint256[] memory nodes;
-    //     //uint256[] memory nodesIndexes = indexes;
+        MultiProofLevelState memory levelState = MultiProofLevelState(
+            new uint256[](leafCount),
+            new uint256[](leafCount),
+            new uint256[](leafCount),
+            new uint256[](leafCount)
+        );
 
-    //     uint256 proofDepth = siblingNodes.length;
-    //     uint256 nodesSize = leaves.length;
+        MultiProofArrLevelPositions memory levelPositions = MultiProofArrLevelPositions(0, 0, 0, 0, proof.edgeIndex);
 
-    //     for (uint256 level = 0; level < proofDepth; ) {
-    //         for (uint256 i = 0; i < leaves[level].length; i++) {
+        for (uint256 level = 0; level <= proof.treeDepth; ) {
+            (levelState, levelPositions) = _hashMultiProofLevel(proof, levelState, levelPositions, level, hasher);
 
-    //         }
+            unchecked {
+                ++level;
+            }
+        }
 
-    //         for (uint256 nodesSelector = 0; nodesSelector < nodesSize; nodesSelector++) {
-    //             uint256 node = nodes[nodesSelector];
-    //             uint256 index = indexes[nodesSelector] >> level;
-
-    //             // if (leafIndex >> (level + 1) == edgeIndex >> (level + 1)) {
-    //             // }
-    //             if (index & 1 == 1) {
-    //                 node = hasher([siblingNodes[i], node]);
-
-    //                 unchecked {
-    //                     ++i;
-    //                 }
-    //             } else {
-    //                 node = hasher([node, siblingNodes[i]]);
-
-    //                 unchecked {
-    //                     ++i;
-    //                 }
-    //             }
-
-    //             unchecked {
-    //                 ++level;
-    //             }
-    //         }
-    //     }
-    //     return nodes[0];
-    // }
+        // all proof siblings need to be read and validated.
+        // Very strict but now this function verifies leaves + indexes + proof siblings
+        if (levelPositions.proofSiblingsReadPos != proof.proofSiblings.length) {
+            revert WrongMultiProof();
+        }
+        return levelState.currentNodes[0];
+    }
 
     /// @dev Retrieves the root of the tree from the 'sideNodes' mapping using the
     /// current tree depth.

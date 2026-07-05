@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {InternalSkinnyIMT, SkinnyIMTFullNodeData} from "../InternalSkinnyIMT.sol";
+import {InternalSkinnyIMT, SkinnyIMTFullNodeData, MultiProof, TreeEmpty} from "../InternalSkinnyIMT.sol";
 // import {IPoseidon2} from "poseidon2-evm/src/IPoseidon2.sol";
 import {LibPoseidon2Yul} from "poseidon2-evm/src/bn254/yul/LibPoseidon2Yul.sol";
 import {NewTree, NewLeaf, UpdatedLeaf} from "../interfaces/events.sol";
@@ -181,27 +181,27 @@ library SkinnyIMTFullNodePoseidon2 {
     /// @param oldLeaf: The value of the leaf that is to be updated.
     /// @param newLeaf: The new value that will replace the oldLeaf in the tree.
     /// @param index: The index of the leaf to be updated.
-    /// @param siblingNodes: An array of sibling nodes that are necessary to recalculate the path to the root.
+    /// @param proofSiblings: An array of sibling nodes that are necessary to recalculate the path to the root.
     /// @return The new hash of the updated node after the leaf has been updated.
     /// @notice Requires collision-resistant hashing: `if (self.sideNodes[level] == oldRoot)` identifies
     /// which sideNode to refresh by hash equality, so a collision between two distinct subtree roots would corrupt tree state silently.
-    /// @notice Checks that the leaf and siblingNodes are within the snark scalar field
+    /// @notice Checks that the leaf and proofSiblings are within the snark scalar field
     function update(
         SkinnyIMTFullNodeData storage self,
         uint256 oldLeaf,
         uint256 newLeaf,
         uint256 index,
-        uint256[] calldata siblingNodes
+        uint256[] calldata proofSiblings
     ) public returns (uint256) {
         // check
         InternalSkinnyIMT._requireInField(newLeaf);
         // @todo what actually breaks if that is not checked? Maybe not checking siblingNodes is fine?
-        for (uint256 i = 0; i < siblingNodes.length; i++) {
-            InternalSkinnyIMT._requireInField(siblingNodes[i]);
+        for (uint256 i = 0; i < proofSiblings.length; i++) {
+            InternalSkinnyIMT._requireInField(proofSiblings[i]);
         }
 
         // update tree
-        uint256 _root = InternalSkinnyIMT._update(self.skinnyData, oldLeaf, newLeaf, index, siblingNodes, hasher);
+        uint256 _root = InternalSkinnyIMT._update(self.skinnyData, oldLeaf, newLeaf, index, proofSiblings, hasher);
 
         // emit event store new leaf
         emit UpdatedLeaf(self.skinnyData.treeId, index, newLeaf, oldLeaf);
@@ -210,13 +210,20 @@ library SkinnyIMTFullNodePoseidon2 {
         return _root;
     }
 
-    /// @dev Checks if a leaf exists in the tree.
-    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
-    /// @param leaf: The value of the leaf to check for existence.
-    /// @param index: The index of the leaf in the tree.
-    /// @param siblingNodes: An array of sibling nodes used to recompute the root for the given leaf.
-    /// @return A boolean value indicating whether the leaf exists in the tree.
-    /// @notice Checks that the leaf and siblingNodes are within the snark scalar field
+    function proofToRoot(
+        uint256 treeDepth,
+        uint256 treeSize,
+        uint256 leaf,
+        uint256 leafIndex,
+        uint256[] calldata proofSiblings
+    ) public view returns (uint256) {
+        InternalSkinnyIMT._requireInField(leaf);
+        for (uint256 i = 0; i < proofSiblings.length; i++) {
+            InternalSkinnyIMT._requireInField(proofSiblings[i]);
+        }
+        return InternalSkinnyIMT._proofToRoot(treeDepth, treeSize, leaf, leafIndex, proofSiblings, hasher);
+    }
+
     function verify(
         SkinnyIMTFullNodeData storage self,
         uint256 leaf,
@@ -229,14 +236,65 @@ library SkinnyIMTFullNodePoseidon2 {
         }
         uint256 _currentRoot = InternalSkinnyIMT._root(self.skinnyData);
         uint256 _provenRoot = InternalSkinnyIMT._proofToRoot(
-            leaf,
-            index,
             self.skinnyData.depth,
             self.skinnyData.size,
+            leaf,
+            index,
             siblingNodes,
             hasher
         );
         return _currentRoot == _provenRoot;
+    }
+
+    function proofManyToRoot(
+        uint256 treeDepth,
+        uint256 edgeIndex,
+        uint256[] calldata leaves,
+        uint256[] calldata leafIndexes,
+        uint256[] calldata leavesLevelIndexes,
+        uint256[] calldata proofSiblings
+    ) public view returns (uint256) {
+        for (uint256 i = 0; i < leaves.length; i++) {
+            InternalSkinnyIMT._requireInField(leaves[i]);
+        }
+        for (uint256 i = 0; i < proofSiblings.length; i++) {
+            InternalSkinnyIMT._requireInField(proofSiblings[i]);
+        }
+        return
+            InternalSkinnyIMT._proofManyToRoot(
+                MultiProof(treeDepth, edgeIndex, leaves, leafIndexes, leavesLevelIndexes, proofSiblings),
+                hasher
+            );
+    }
+
+    function verifyMany(
+        SkinnyIMTFullNodeData storage self,
+        uint256[] calldata leaves,
+        uint256[] calldata leafIndexes,
+        uint256[] calldata leavesLevelIndexes,
+        uint256[] calldata proofSiblings
+    ) public view returns (bool) {
+        for (uint256 i = 0; i < leaves.length; i++) {
+            InternalSkinnyIMT._requireInField(leaves[i]);
+        }
+        for (uint256 i = 0; i < proofSiblings.length; i++) {
+            InternalSkinnyIMT._requireInField(proofSiblings[i]);
+        }
+        if (self.skinnyData.size == 0) {
+            revert TreeEmpty();
+        }
+        uint256 computedRoot = InternalSkinnyIMT._proofManyToRoot(
+            MultiProof(
+                self.skinnyData.depth,
+                self.skinnyData.size - 1, // -1 is edgeIndex
+                leaves,
+                leafIndexes,
+                leavesLevelIndexes,
+                proofSiblings
+            ),
+            hasher
+        );
+        return computedRoot == InternalSkinnyIMT._root(self.skinnyData);
     }
 
     /// @dev Retrieves the root of the tree from the 'sideNodes' mapping using the
