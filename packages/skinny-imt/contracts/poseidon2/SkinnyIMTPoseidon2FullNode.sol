@@ -9,7 +9,7 @@ import {NewTree, NewLeaf, UpdatedLeaf} from "../interfaces/events.sol";
 /// @title SkinnyIMTFullNodePoseidon2
 /// @author Jim Jim Valkema
 /// @notice stores all leafs on-chain so full nodes can retrieve them even after events are pruned (older than 1 year)
-library SkinnyIMTFullNodePoseidon2 {
+library SkinnyIMTPoseidon2FullNode {
     // @TODO ask zemse if the wants to make Poseidon2Yul_BN254 an library with public functions, would add 50~150 gas
     // Hardcoded since poseidon2 is deployed as a contract instead of a library
     // This is because author used a gas saving trick with .fallback
@@ -130,39 +130,6 @@ library SkinnyIMTFullNodePoseidon2 {
         return (_root, _startIndex, _nextIndex);
     }
 
-    /// @dev Convenience wrapper for the common `value == 0` case.
-    /// @notice No scalar-field check: zero is always in-field.
-    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
-    /// @param amount: The number of zero leaves to append.
-    /// @return _root The new root after the leaves have been appended.
-    /// @return _startIndex The index of the first inserted leaf (inclusive).
-    /// @return _nextIndex The index for the next insert after this call (exclusive).
-    function insertManyZeros(
-        SkinnyIMTFullNodeData storage self,
-        uint256 amount
-    ) public returns (uint256, uint256, uint256) {
-        // update tree
-        (uint256 _root, uint256 _startIndex, ) = InternalSkinnyIMT._insertManyRepeated(
-            self.skinnyData,
-            0,
-            amount,
-            hasher
-        );
-        uint256 _nextIndex = _startIndex + amount;
-
-        // add leafs, emit event
-        uint256 _treeId = self.skinnyData.treeId;
-        for (uint256 _index = _startIndex; _index < _nextIndex; ) {
-            emit NewLeaf(_treeId, _index, 0);
-            self.leaves.push(0);
-            unchecked {
-                ++_index;
-            }
-        }
-
-        return (_root, _startIndex, _nextIndex);
-    }
-
     /// @dev Pre-populates the repeated-subtree cache for `value` up to `upToLevel`.
     /// Once cached, future `insertManyRepeated(value, ...)` calls skip those hashes
     /// and pay only one SLOAD per level instead.
@@ -251,7 +218,6 @@ library SkinnyIMTFullNodePoseidon2 {
         uint256 edgeIndex,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
-        uint256[] calldata leavesLevelIndexes,
         uint256[] calldata proofSiblings
     ) public view returns (uint256) {
         for (uint256 i = 0; i < leaves.length; i++) {
@@ -262,7 +228,7 @@ library SkinnyIMTFullNodePoseidon2 {
         }
         return
             InternalSkinnyIMT._proofManyToRoot(
-                MultiProof(treeDepth, edgeIndex, leaves, leafIndexes, leavesLevelIndexes, proofSiblings),
+                MultiProof(treeDepth, edgeIndex, leaves, leafIndexes, proofSiblings),
                 hasher
             );
     }
@@ -271,7 +237,6 @@ library SkinnyIMTFullNodePoseidon2 {
         SkinnyIMTFullNodeData storage self,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
-        uint256[] calldata leavesLevelIndexes,
         uint256[] calldata proofSiblings
     ) public view returns (bool) {
         for (uint256 i = 0; i < leaves.length; i++) {
@@ -289,7 +254,6 @@ library SkinnyIMTFullNodePoseidon2 {
                 self.skinnyData.size - 1, // -1 is edgeIndex
                 leaves,
                 leafIndexes,
-                leavesLevelIndexes,
                 proofSiblings
             ),
             hasher

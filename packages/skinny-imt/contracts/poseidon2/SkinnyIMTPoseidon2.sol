@@ -108,24 +108,6 @@ library SkinnyIMTPoseidon2 {
         return (_root, _startIndex, _nextIndex);
     }
 
-    /// @dev Convenience wrapper for the common `value == 0` case.
-    /// @notice No scalar-field check: zero is always in-field.
-    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
-    /// @param amount: The number of zero leaves to append.
-    /// @return _root The new root after the leaves have been appended.
-    /// @return _startIndex The index of the first inserted leaf (inclusive).
-    /// @return _nextIndex The index for the next insert after this call (exclusive).
-    function insertManyZeros(SkinnyIMTData storage self, uint256 amount) public returns (uint256, uint256, uint256) {
-        // update tree
-        (uint256 _root, uint256 _startIndex, ) = InternalSkinnyIMT._insertManyRepeated(self, 0, amount, hasher);
-
-        // emit event
-        uint256 _nextIndex = _startIndex + amount;
-        emit RepeatedLeafs(self.treeId, _startIndex, _nextIndex, 0);
-
-        return (_root, _startIndex, _nextIndex);
-    }
-
     /// @dev Pre-populates the repeated-subtree cache for `value` up to `upToLevel`.
     /// Once cached, future `insertManyRepeated(value, ...)` calls skip those hashes
     /// and pay only one SLOAD per level instead.
@@ -206,7 +188,6 @@ library SkinnyIMTPoseidon2 {
         uint256 edgeIndex,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
-        uint256[] calldata leavesLevelIndexes,
         uint256[] calldata proofSiblings
     ) public view returns (uint256) {
         for (uint256 i = 0; i < leaves.length; i++) {
@@ -217,7 +198,7 @@ library SkinnyIMTPoseidon2 {
         }
         return
             InternalSkinnyIMT._proofManyToRoot(
-                MultiProof(treeDepth, edgeIndex, leaves, leafIndexes, leavesLevelIndexes, proofSiblings),
+                MultiProof(treeDepth, edgeIndex, leaves, leafIndexes, proofSiblings),
                 hasher
             );
     }
@@ -226,7 +207,6 @@ library SkinnyIMTPoseidon2 {
         SkinnyIMTData storage self,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
-        uint256[] calldata leavesLevelIndexes,
         uint256[] calldata proofSiblings
     ) public view returns (bool) {
         for (uint256 i = 0; i < leaves.length; i++) {
@@ -239,7 +219,7 @@ library SkinnyIMTPoseidon2 {
             revert TreeEmpty();
         }
         uint256 computedRoot = InternalSkinnyIMT._proofManyToRoot(
-            MultiProof(self.depth, self.size - 1, leaves, leafIndexes, leavesLevelIndexes, proofSiblings),
+            MultiProof(self.depth, self.size - 1, leaves, leafIndexes, proofSiblings),
             hasher
         );
         return computedRoot == InternalSkinnyIMT._root(self);

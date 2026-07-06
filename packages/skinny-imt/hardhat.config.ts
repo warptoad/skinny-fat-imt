@@ -13,14 +13,15 @@ const hardhatConfig: HardhatUserConfig = {
                 enabled: true,
                 //runs: 200
                 // @TODO poseidon2 size too big, should do external call instead
-                runs: 2 ** (32 - 20) + 1000
+                //runs: 2 ** (32 - 19) + 1000
+                runs: 2 ** 32 - 1
             }
         }
     },
     gasReporter: {
         currency: "USD",
         enabled: process.env.REPORT_GAS === "true",
-        outputJSONFile: "gas-report-leanimt.json",
+        outputJSONFile: "gas-report-skinnyimt.json",
         outputJSON: process.env.REPORT_GAS_OUTPUT_JSON === "true"
     },
     typechain: {

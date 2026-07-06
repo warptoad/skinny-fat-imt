@@ -19,10 +19,6 @@ contract SkinnyIMTPoseidon2Test {
         SkinnyIMTPoseidon2.insertMany(data, leaves);
     }
 
-    function insertManyZeros(uint256 amount) external {
-        SkinnyIMTPoseidon2.insertManyZeros(data, amount);
-    }
-
     function insertManyRepeated(uint256 value, uint256 amount) external {
         SkinnyIMTPoseidon2.insertManyRepeated(data, value, amount);
     }
@@ -43,17 +39,26 @@ contract SkinnyIMTPoseidon2Test {
         SkinnyIMTPoseidon2.update(data, oldLeaf, newLeaf, index, siblingNodes);
     }
 
-    function verify(uint256 leaf, uint256 index, uint256[] calldata siblingsNodes) external view returns (bool) {
-        return SkinnyIMTPoseidon2.verify(data, leaf, index, siblingsNodes);
+    // verify/verifyMany are wrapped as state-changing (event-emitting) txs rather than
+    // plain `view` so they appear in the hardhat gas report. Tests read the boolean
+    // result via `.staticCall` and send the real tx to record gas.
+    event VerifyResult(bool result);
+    event VerifyManyResult(bool result);
+
+    function verify(uint256 leaf, uint256 index, uint256[] calldata siblingsNodes) external returns (bool) {
+        bool result = SkinnyIMTPoseidon2.verify(data, leaf, index, siblingsNodes);
+        emit VerifyResult(result);
+        return result;
     }
 
     function verifyMany(
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
-        uint256[] calldata leavesLevelIndexes,
         uint256[] calldata proofSiblings
-    ) external view returns (bool) {
-        return SkinnyIMTPoseidon2.verifyMany(data, leaves, leafIndexes, leavesLevelIndexes, proofSiblings);
+    ) external returns (bool) {
+        bool result = SkinnyIMTPoseidon2.verifyMany(data, leaves, leafIndexes, proofSiblings);
+        emit VerifyManyResult(result);
+        return result;
     }
 
     function root() public view returns (uint256) {

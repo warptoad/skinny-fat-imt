@@ -41,7 +41,6 @@ struct MultiProof {
     uint256 edgeIndex;
     uint256[] leaves;
     uint256[] leafIndexes;
-    uint256[] leavesLevelIndexes;
     uint256[] proofSiblings;
 }
 
@@ -701,43 +700,22 @@ library InternalSkinnyIMT {
     struct MultiProofArrLevelPositions {
         uint256 currentNodesFreeSlot;
         uint256 nextNodesFreeSlot;
-        uint256 leavesReadPos;
         uint256 proofSiblingsReadPos;
         uint256 edgePos;
     }
 
+    /// @dev Folds one tree level: reads the known nodes in `currentNodes` (positions in
+    /// `currentPositions`) and writes their parents into `nextNodes` / `nextPositions`,
+    /// pulling a sibling from `proof.proofSiblings` only where one isn't already known.
+    /// A rightmost node with no sibling (position == edgePos) is carried up unchanged — this
+    /// is where dangling (a leaf or an internal node with no right neighbor) is resolved,
+    /// entirely from the tree's `edgeIndex`, not from any caller-supplied schedule.
     function _hashMultiProofLevel(
         MultiProof memory proof,
         MultiProofLevelState memory levelState,
         MultiProofArrLevelPositions memory levelPositions,
-        uint256 level,
         function(uint256[2] memory) view returns (uint256) hasher
     ) private view returns (MultiProofLevelState memory, MultiProofArrLevelPositions memory) {
-        // copy new leaves and indexes for this level
-        {
-            uint256 amountNewLeaves = proof.leavesLevelIndexes[level] + 1 - levelPositions.leavesReadPos;
-            for (uint256 i = 0; i < amountNewLeaves; i++) {
-                uint256 leafIndex = proof.leafIndexes[levelPositions.leavesReadPos + i];
-
-                // Leaves above level 0 (who dangle), get skipped on lower levels
-                // But their indexes still get halved (bit shifted) every move up. This cause the exact index to be lost
-                // To verify that the index is the original and not something that happens to line up when bit shifted
-                // to the current level.
-                // we do: (leafIndex >> level) << level
-                // This
-                if (level != 0 && (leafIndex != proof.edgeIndex || (leafIndex >> level) << level != leafIndex)) {
-                    revert WrongMultiProof();
-                }
-
-                levelState.currentNodes[levelPositions.currentNodesFreeSlot + i] = proof.leaves[
-                    levelPositions.leavesReadPos + i
-                ];
-                levelState.currentPositions[levelPositions.currentNodesFreeSlot + i] = leafIndex >> level;
-            }
-            levelPositions.currentNodesFreeSlot += amountNewLeaves;
-            levelPositions.leavesReadPos = proof.leavesLevelIndexes[level] + 1;
-        }
-
         for (uint256 i = 0; i < levelPositions.currentNodesFreeSlot; i++) {
             // hash left or right
             if (levelState.currentPositions[i] & 1 == 1) {
@@ -818,10 +796,20 @@ library InternalSkinnyIMT {
             new uint256[](leafCount)
         );
 
-        MultiProofArrLevelPositions memory levelPositions = MultiProofArrLevelPositions(0, 0, 0, 0, proof.edgeIndex);
+        MultiProofArrLevelPositions memory levelPositions = MultiProofArrLevelPositions(0, 0, 0, proof.edgeIndex);
 
-        for (uint256 level = 0; level <= proof.treeDepth; ) {
-            (levelState, levelPositions) = _hashMultiProofLevel(proof, levelState, levelPositions, level, hasher);
+        // Seed every proven leaf at level 0, at its real index. Each leaf is then hashed up
+        // from the bottom, so an internal-node value or a wrong index simply produces a
+        // non-matching root — nothing can enter above level 0 un-hashed. Dangling is resolved
+        // while climbing (the edge-carry in _hashMultiProofLevel), derived from `edgeIndex`.
+        for (uint256 i = 0; i < leafCount; i++) {
+            levelState.currentNodes[i] = proof.leaves[i];
+            levelState.currentPositions[i] = proof.leafIndexes[i];
+        }
+        levelPositions.currentNodesFreeSlot = leafCount;
+
+        for (uint256 level = 0; level < proof.treeDepth; ) {
+            (levelState, levelPositions) = _hashMultiProofLevel(proof, levelState, levelPositions, hasher);
 
             unchecked {
                 ++level;
