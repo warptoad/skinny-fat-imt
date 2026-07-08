@@ -3,6 +3,8 @@
 pragma solidity ^0.8.4;
 
 import {SkinnyIMTPoseidon2, SkinnyIMTData} from "../SkinnyIMTPoseidon2.sol";
+// TODO move here
+import {TreeEmpty} from "../../InternalSkinnyIMT.sol";
 
 contract SkinnyIMTPoseidon2Test {
     SkinnyIMTData internal data;
@@ -46,7 +48,9 @@ contract SkinnyIMTPoseidon2Test {
     event VerifyManyResult(bool result);
 
     function verify(uint256 leaf, uint256 index, uint256[] calldata siblingsNodes) external returns (bool) {
-        bool result = SkinnyIMTPoseidon2.verify(data, leaf, index, siblingsNodes);
+        uint256 _currentRoot = SkinnyIMTPoseidon2.root(data);
+        uint256 _provenRoot = SkinnyIMTPoseidon2.proofToRoot(data.depth, data.size, leaf, index, siblingsNodes);
+        bool result = _currentRoot == _provenRoot;
         emit VerifyResult(result);
         return result;
     }
@@ -56,7 +60,17 @@ contract SkinnyIMTPoseidon2Test {
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
     ) external returns (bool) {
-        bool result = SkinnyIMTPoseidon2.verifyMany(data, leaves, leafIndexes, proofSiblings);
+        if (data.size == 0) {
+            revert TreeEmpty();
+        }
+        uint256 computedRoot = SkinnyIMTPoseidon2.proofManyToRoot(
+            data.depth,
+            data.size - 1,
+            leaves,
+            leafIndexes,
+            proofSiblings
+        );
+        bool result = computedRoot == SkinnyIMTPoseidon2.root(data);
         emit VerifyManyResult(result);
         return result;
     }

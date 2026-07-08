@@ -191,28 +191,6 @@ library SkinnyIMTPoseidon2FullNode {
         return InternalSkinnyIMT._proofToRoot(treeDepth, treeSize, leaf, leafIndex, proofSiblings, hasher);
     }
 
-    function verify(
-        SkinnyIMTFullNodeData storage self,
-        uint256 leaf,
-        uint256 index,
-        uint256[] calldata siblingNodes
-    ) public view returns (bool) {
-        InternalSkinnyIMT._requireInField(leaf);
-        for (uint256 i = 0; i < siblingNodes.length; i++) {
-            InternalSkinnyIMT._requireInField(siblingNodes[i]);
-        }
-        uint256 _currentRoot = InternalSkinnyIMT._root(self.skinnyData);
-        uint256 _provenRoot = InternalSkinnyIMT._proofToRoot(
-            self.skinnyData.depth,
-            self.skinnyData.size,
-            leaf,
-            index,
-            siblingNodes,
-            hasher
-        );
-        return _currentRoot == _provenRoot;
-    }
-
     function proofManyToRoot(
         uint256 treeDepth,
         uint256 edgeIndex,
@@ -226,39 +204,11 @@ library SkinnyIMTPoseidon2FullNode {
         for (uint256 i = 0; i < proofSiblings.length; i++) {
             InternalSkinnyIMT._requireInField(proofSiblings[i]);
         }
-        return
-            InternalSkinnyIMT._proofManyToRoot(
-                MultiProof(treeDepth, edgeIndex, leaves, leafIndexes, proofSiblings),
-                hasher
-            );
-    }
-
-    function verifyMany(
-        SkinnyIMTFullNodeData storage self,
-        uint256[] calldata leaves,
-        uint256[] calldata leafIndexes,
-        uint256[] calldata proofSiblings
-    ) public view returns (bool) {
-        for (uint256 i = 0; i < leaves.length; i++) {
-            InternalSkinnyIMT._requireInField(leaves[i]);
-        }
-        for (uint256 i = 0; i < proofSiblings.length; i++) {
-            InternalSkinnyIMT._requireInField(proofSiblings[i]);
-        }
-        if (self.skinnyData.size == 0) {
-            revert TreeEmpty();
-        }
-        uint256 computedRoot = InternalSkinnyIMT._proofManyToRoot(
-            MultiProof(
-                self.skinnyData.depth,
-                self.skinnyData.size - 1, // -1 is edgeIndex
-                leaves,
-                leafIndexes,
-                proofSiblings
-            ),
+        (uint256 provenRoot, ) = InternalSkinnyIMT._proofManyToRoot(
+            MultiProof(treeDepth, edgeIndex, leaves, leafIndexes, proofSiblings),
             hasher
         );
-        return computedRoot == InternalSkinnyIMT._root(self.skinnyData);
+        return provenRoot;
     }
 
     /// @dev Retrieves the root of the tree from the 'sideNodes' mapping using the

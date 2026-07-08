@@ -2,6 +2,10 @@ import { LeanIMT as JSLeanIMT } from "@zk-kit/lean-imt"
 import { expect } from "chai"
 import { run } from "hardhat"
 
+// @notice: js-leanIMT has a bug in insertMany that causes inserts to be skipped if the value is 0
+// see: https://github.com/zk-kit/zk-kit/issues/419
+// these test do a for loop on (regular) insert instead as a workaround
+
 export interface SkinnyIMTTestConfig {
     deployTaskName: string
     libraryName: string
@@ -243,14 +247,14 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
             })
 
             it("Should insert N copies of a non-zero value into an empty tree", async () => {
-                const v = 42n
-                const n = 7
-                for (let i = 0; i < n; i++) jsLeanIMT.insert(v)
+                const value = 42n
+                const amountLeafs = 7
+                for (let i = 0; i < amountLeafs; i++) jsLeanIMT.insert(value)
 
-                await skinnyIMTTest.insertManyRepeated(v, n)
+                await skinnyIMTTest.insertManyRepeated(value, amountLeafs)
 
                 expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
-                expect(await skinnyIMTTest.size()).to.equal(n)
+                expect(await skinnyIMTTest.size()).to.equal(amountLeafs)
                 expect(await skinnyIMTTest.depth()).to.equal(jsLeanIMT.depth)
             })
 
@@ -646,6 +650,37 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
 
                 const root = await skinnyIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
+            })
+
+            it("Should not clobber a non-frontier side node when updating (size 11, then insert)", async () => {
+                // Regression guard for the sideNodes refresh condition in _update.
+                //
+                // In a size-11 tree the live side node at level 1 is H(idx8, idx9) — that's the
+                // left sibling the next insert (idx 11) hashes against. Updating index 0 recomputes
+                // H(idx0, idx1) at level 1, but index 0 does NOT share a parent with the last leaf
+                // there, so sideNodes[1] must be left alone.
+                //
+                // The real condition (`leafIndex >> (level+1) == edgeIndex >> (level+1)`) knows that
+                // and skips the write. A liveness-only stand-in such as `(edgeIndex >> level) & 1`
+                // fires here (the edge is at an odd position at level 1) and overwrites sideNodes[1]
+                // with H(idx0, idx1). The corruption is invisible right after the update — it only
+                // surfaces when the next insert reads that slot and the root diverges.
+                for (let i = 0; i < 11; i += 1) {
+                    jsLeanIMT.insert(BigInt(i + 1))
+                    await skinnyIMTTest.insert(i + 1)
+                }
+
+                const { siblings } = jsLeanIMT.generateProof(0)
+                await skinnyIMTTest.update(1, 99, 0, siblings)
+                jsLeanIMT.update(0, 99n)
+
+                // Still correct here: the update reconstructs index 0's own path fine.
+                expect(await skinnyIMTTest.root(), "root immediately after update").to.equal(jsLeanIMT.root)
+
+                // The next insert hashes against sideNodes[1]; a clobbered slot diverges here.
+                jsLeanIMT.insert(12n)
+                await skinnyIMTTest.insert(12)
+                expect(await skinnyIMTTest.root(), "root after a later insert").to.equal(jsLeanIMT.root)
             })
         })
 
@@ -1141,6 +1176,102 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 const root = await skinnyIMTTest.root()
 
                 expect(root).to.equal(jsLeanIMT.root)
+            })
+        })
+
+        // The _update / insertMany / insertManyRepeated sideNode-write optimization SKIPS
+        // writes it deems dead (a slot the next op overwrites before reading). A wrongly
+        // skipped *live* write only surfaces later, as a wrong root on an op that READS
+        // sideNodes (a subsequent insert / insertMany / insertManyRepeated). These curated
+        // cases do exactly that — optimized op, then grow — and diff against the reference
+        // LeanIMT. Representative geometries only; exhaustive + randomized fuzzing lives in a
+        // separate repo.
+        describe("sideNode write optimization safety (differential)", () => {
+            async function freshDeploy() {
+                const { contract } = await run(deployTaskName, { library: libraryName, logs: false })
+                return contract
+            }
+
+            // Sizes picked for distinct trailing-bit shapes (odd, even, all-ones, power-of-two,
+            // power+1, mixed) — that's what changes which sideNode level a write is skipped at.
+            // Growing after the update turns a "dead at update time" slot into one a later op reads.
+            it("update boundary indexes on representative sizes, then grow", async function () {
+                this.timeout(120000)
+                const sizes = [1, 2, 3, 7, 8, 9, 12]
+                for (const size of sizes) {
+                    const indexes = [...new Set([0, size >> 1, size - 1])]
+                    for (const idx of indexes) {
+                        const contract = await freshDeploy()
+                        const ref = new JSLeanIMT((a, b) => hashFn(a, b))
+                        const initial = Array.from({ length: size }, (_, i) => BigInt(i + 1))
+                        ref.insertMany(initial)
+                        await contract.insertMany(initial)
+
+                        const newVal = BigInt(100000 + size * 100 + idx)
+                        const { siblings } = ref.generateProof(idx)
+                        await contract.update(ref.leaves[idx], newVal, idx, siblings)
+                        ref.update(idx, newVal)
+                        expect(await contract.root(), `size=${size} idx=${idx} post-update`).to.equal(ref.root)
+
+                        // grow leaf-by-leaf: single insert reads sideNodes
+                        for (let k = 0; k < 4; k++) {
+                            const v = BigInt(900000 + size * 1000 + idx * 100 + k)
+                            ref.insert(v)
+                            await contract.insert(v)
+                            expect(await contract.root(), `size=${size} idx=${idx} append k=${k}`).to.equal(ref.root)
+                        }
+
+                        // and via a batch op, which reads sideNodes on a different path
+                        const batch = [111n, 222n, 333n]
+                        ref.insertMany(batch)
+                        await contract.insertMany(batch)
+                        expect(await contract.root(), `size=${size} idx=${idx} post-batch`).to.equal(ref.root)
+                    }
+                }
+            })
+
+            // Batch build (which skips dead frontier writes), then append so later inserts read
+            // that frontier. A few representative (pre, batch, mode) shapes.
+            it("batch-build then append leaf-by-leaf", async function () {
+                this.timeout(120000)
+                const cases: [number, number, "insertMany" | "insertManyRepeated"][] = [
+                    [0, 1, "insertMany"],
+                    [0, 5, "insertMany"],
+                    [3, 4, "insertMany"],
+                    [0, 3, "insertManyRepeated"],
+                    [5, 6, "insertManyRepeated"],
+                    [1, 7, "insertMany"]
+                ]
+                for (const [pre, batch, mode] of cases) {
+                    const contract = await freshDeploy()
+                    const ref = new JSLeanIMT((a, b) => hashFn(a, b))
+
+                    if (pre > 0) {
+                        const preLeaves = Array.from({ length: pre }, (_, i) => BigInt(i + 1))
+                        ref.insertMany(preLeaves)
+                        await contract.insertMany(preLeaves)
+                    }
+
+                    if (mode === "insertMany") {
+                        const b = Array.from({ length: batch }, (_, i) => BigInt(1000 + i))
+                        ref.insertMany(b)
+                        await contract.insertMany(b)
+                    } else {
+                        const v = 7777n
+                        for (let i = 0; i < batch; i++) ref.insert(v)
+                        await contract.insertManyRepeated(v, batch)
+                    }
+                    expect(await contract.root(), `${mode} pre=${pre} batch=${batch} post-op`).to.equal(ref.root)
+
+                    for (let k = 0; k < 4; k++) {
+                        const v = BigInt(50000 + k)
+                        ref.insert(v)
+                        await contract.insert(v)
+                        expect(await contract.root(), `${mode} pre=${pre} batch=${batch} append k=${k}`).to.equal(
+                            ref.root
+                        )
+                    }
+                }
             })
         })
     })

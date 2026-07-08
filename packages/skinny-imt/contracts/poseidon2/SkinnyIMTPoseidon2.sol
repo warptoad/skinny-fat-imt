@@ -168,20 +168,20 @@ library SkinnyIMTPoseidon2 {
         return InternalSkinnyIMT._proofToRoot(treeDepth, treeSize, leaf, leafIndex, proofSiblings, hasher);
     }
 
-    function verify(
-        SkinnyIMTData storage self,
-        uint256 leaf,
-        uint256 index,
-        uint256[] calldata siblingNodes
-    ) public view returns (bool) {
-        InternalSkinnyIMT._requireInField(leaf);
-        for (uint256 i = 0; i < siblingNodes.length; i++) {
-            InternalSkinnyIMT._requireInField(siblingNodes[i]);
-        }
-        uint256 _currentRoot = InternalSkinnyIMT._root(self);
-        uint256 _provenRoot = InternalSkinnyIMT._proofToRoot(self.depth, self.size, leaf, index, siblingNodes, hasher);
-        return _currentRoot == _provenRoot;
-    }
+    // function verify(
+    //     SkinnyIMTData storage self,
+    //     uint256 leaf,
+    //     uint256 index,
+    //     uint256[] calldata siblingNodes
+    // ) public view returns (bool) {
+    //     InternalSkinnyIMT._requireInField(leaf);
+    //     for (uint256 i = 0; i < siblingNodes.length; i++) {
+    //         InternalSkinnyIMT._requireInField(siblingNodes[i]);
+    //     }
+    //     uint256 _currentRoot = InternalSkinnyIMT._root(self);
+    //     uint256 _provenRoot = InternalSkinnyIMT._proofToRoot(self.depth, self.size, leaf, index, siblingNodes, hasher);
+    //     return _currentRoot == _provenRoot;
+    // }
 
     function proofManyToRoot(
         uint256 treeDepth,
@@ -196,34 +196,35 @@ library SkinnyIMTPoseidon2 {
         for (uint256 i = 0; i < proofSiblings.length; i++) {
             InternalSkinnyIMT._requireInField(proofSiblings[i]);
         }
-        return
-            InternalSkinnyIMT._proofManyToRoot(
-                MultiProof(treeDepth, edgeIndex, leaves, leafIndexes, proofSiblings),
-                hasher
-            );
-    }
-
-    function verifyMany(
-        SkinnyIMTData storage self,
-        uint256[] calldata leaves,
-        uint256[] calldata leafIndexes,
-        uint256[] calldata proofSiblings
-    ) public view returns (bool) {
-        for (uint256 i = 0; i < leaves.length; i++) {
-            InternalSkinnyIMT._requireInField(leaves[i]);
-        }
-        for (uint256 i = 0; i < proofSiblings.length; i++) {
-            InternalSkinnyIMT._requireInField(proofSiblings[i]);
-        }
-        if (self.size == 0) {
-            revert TreeEmpty();
-        }
-        uint256 computedRoot = InternalSkinnyIMT._proofManyToRoot(
-            MultiProof(self.depth, self.size - 1, leaves, leafIndexes, proofSiblings),
+        (uint256 provenRoot, ) = InternalSkinnyIMT._proofManyToRoot(
+            MultiProof(treeDepth, edgeIndex, leaves, leafIndexes, proofSiblings),
             hasher
         );
-        return computedRoot == InternalSkinnyIMT._root(self);
+
+        return provenRoot;
     }
+
+    // function verifyMany(
+    //     SkinnyIMTData storage self,
+    //     uint256[] calldata leaves,
+    //     uint256[] calldata leafIndexes,
+    //     uint256[] calldata proofSiblings
+    // ) public view returns (bool) {
+    //     for (uint256 i = 0; i < leaves.length; i++) {
+    //         InternalSkinnyIMT._requireInField(leaves[i]);
+    //     }
+    //     for (uint256 i = 0; i < proofSiblings.length; i++) {
+    //         InternalSkinnyIMT._requireInField(proofSiblings[i]);
+    //     }
+    //     if (self.size == 0) {
+    //         revert TreeEmpty();
+    //     }
+    //     uint256 computedRoot = InternalSkinnyIMT._proofManyToRoot(
+    //         MultiProof(self.depth, self.size - 1, leaves, leafIndexes, proofSiblings),
+    //         hasher
+    //     );
+    //     return computedRoot == InternalSkinnyIMT._root(self);
+    // }
 
     /// @dev Retrieves the root of the tree from the 'sideNodes' mapping using the
     /// current tree depth.

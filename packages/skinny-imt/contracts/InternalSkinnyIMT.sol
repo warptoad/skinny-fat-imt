@@ -128,8 +128,12 @@ library InternalSkinnyIMT {
             } else {
                 // leave to dangle:
                 // node is used in next iter, becomes it's own parent.
-                // Stored in sideNodes, for when it will have an right sibling eventually
-                self.sideNodes[level] = node;
+                if (((index + 1) >> level) & 1 == 1) {
+                    // only store it if the next insert actually needs it
+                    // that is when the next index is a right node at this level. That is when it reads from sideNodes
+                    // in the case above
+                    self.sideNodes[level] = node;
+                }
             }
 
             unchecked {
@@ -234,13 +238,19 @@ library InternalSkinnyIMT {
             // will be the value before the last one.
             // If it is even and there is only one element, there is no need to save anything because
             // the correct value for this level was already saved before.
-            if (currentLevelSize & 1 == 1) {
-                // currentLevelSize % 2 == 1, is odd
-                // currentLevelSize = treeSize + leaves.length
-                // currentLevelSize = (currentLevelSize - 1) / 2 + 1
-                self.sideNodes[level] = currentLevelNewNodes[currentLevelNewNodes.length - 1];
-            } else if (currentLevelNewNodes.length > 1) {
-                self.sideNodes[level] = currentLevelNewNodes[currentLevelNewNodes.length - 2];
+            // Only refresh the sideNode at levels live for the new tree (set bits of the
+            // new leaf count). At the other levels the next insert overwrites the slot
+            // before reading it, so the store would be dead. (Computed inline rather than
+            // cached in a local — the surrounding function is at the 16-slot stack limit.)
+            if (((oldTreeSize + leaves.length) >> level) & 1 == 1) {
+                if (currentLevelSize & 1 == 1) {
+                    // currentLevelSize % 2 == 1, is odd
+                    // currentLevelSize = treeSize + leaves.length
+                    // currentLevelSize = (currentLevelSize - 1) / 2 + 1
+                    self.sideNodes[level] = currentLevelNewNodes[currentLevelNewNodes.length - 1];
+                } else if (currentLevelNewNodes.length > 1) {
+                    self.sideNodes[level] = currentLevelNewNodes[currentLevelNewNodes.length - 2];
+                }
             }
 
             currentLevelStartIndex = nextLevelStartIndex;
@@ -411,8 +421,10 @@ library InternalSkinnyIMT {
                 }
             }
 
-            // something happened, store it!
-            if (newSideNode != oldSideNode) {
+            // something happened, store it — but only at levels live for the new tree
+            // (set bits of newSize == lastIndex + 1). Dead levels are overwritten by the
+            // next insert before they're read, so refreshing them would be a wasted store.
+            if (newSideNode != oldSideNode && ((lastIndex + 1) >> level) & 1 == 1) {
                 self.sideNodes[level] = newSideNode;
             }
 
@@ -577,7 +589,8 @@ library InternalSkinnyIMT {
 
         // index of the very last leaf in the tree
         // tracking this index up the tree, follows the indexes of the nodes in self.sidNodes
-        uint256 edgeIndex = self.size - 1;
+        uint256 treeSize = self.size;
+        uint256 edgeIndex = treeSize - 1;
 
         // because leanIMT is not balanced proofSiblings.length can be smaller then tree depth
         // we cant just use level so we separately track those 2
@@ -590,6 +603,7 @@ library InternalSkinnyIMT {
         // the current root. Difference is that self.sideNodes[level] = newNode gets assigned when newNode is an
         // edge node. Thats when newNode is left.
         for (uint256 level = 0; level < treeDepth; ) {
+            // leafIndex is odd / is right
             if ((leafIndex >> level) & 1 == 1) {
                 // no newNode to store in sideNodes to store here, the next insert does not need it if it already
                 // has a sibling
@@ -607,8 +621,27 @@ library InternalSkinnyIMT {
 
                     // @notice used to be simple self.sideNodes[level] == oldNode equality check in leanIMT,
                     // but duplicate values occurring break this assumption
-                    if (leafIndex >> (level + 1) == edgeIndex >> (level + 1)) {
-                        // same parent on next level, so newNode is a left sibling of !
+                    //
+                    // The geometry test (shares a parent with the last leaf) says this node IS the one
+                    // stored in sideNodes[level]. The extra `(treeSize >> level) & 1 == 1` is a liveness
+                    // filter: the slot is only read again if the next appended leaf lands as a right child
+                    // at this level (a set bit of the leaf count). Otherwise the next insert overwrites the
+                    // slot before reading, so refreshing it here would be a dead write.
+                    if ((treeSize >> level) & 1 == 1 && leafIndex >> (level + 1) == edgeIndex >> (level + 1)) {
+                        // because the leanIMT structure creates a unbalanced tree which hoist internal nodes or leafs
+                        // up if the size is not even after a insert.
+                        // the sideNodes being stored is not always at edgeIndex. At size 5 for example. Index 4 needs
+                        // the grand parent of 0,1,2,3. And 4 is hoisted up to that level and hashed with
+                        // that grand parent. Which is hash(grandParent, index_4).
+                        // This only happens if the next node above is a edgeNode. That's why we check:
+                        // leafIndex >> (level + 1) == edgeIndex >> (level + 1)
+                        // But that stores every node that happens to have a left sibling that is an edge node.
+                        // But we don't need all of those, because the next insert only needs siblings that are left
+                        // to the insert. So we do
+                        // (treeSize >> level) & 1 == 1
+                        // treeSize == nextInsertIndex. And we check if the next insert of the index lays to the left
+                        // thus needs to do hash(sidNodes,insertedNode). Which is the only case we actually need to
+                        // have this side node
                         self.sideNodes[level] = newNode;
                     }
 
@@ -618,9 +651,11 @@ library InternalSkinnyIMT {
                     unchecked {
                         ++siblingIndex;
                     }
-                } else {
+                } else if ((treeSize >> level) & 1 == 1) {
+                    // cary up this side node, it dangles (same liveness filter as above)
                     self.sideNodes[level] = newNode;
                 }
+                // others that aren't leafs get carried up without adding to sideNodes
             }
 
             unchecked {
@@ -711,79 +746,101 @@ library InternalSkinnyIMT {
     /// is where dangling (a leaf or an internal node with no right neighbor) is resolved,
     /// entirely from the tree's `edgeIndex`, not from any caller-supplied schedule.
     function _hashMultiProofLevel(
+        uint256 level,
         MultiProof memory proof,
         MultiProofLevelState memory levelState,
-        MultiProofArrLevelPositions memory levelPositions,
+        MultiProofArrLevelPositions memory levelPos,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) private view returns (MultiProofLevelState memory, MultiProofArrLevelPositions memory) {
-        for (uint256 i = 0; i < levelPositions.currentNodesFreeSlot; i++) {
+    ) private view returns (MultiProofLevelState memory, MultiProofArrLevelPositions memory, uint256, bool) {
+        uint256 newSideNode;
+        bool isNewSideNode;
+        for (uint256 i = 0; i < levelPos.currentNodesFreeSlot; i++) {
             // hash left or right
             if (levelState.currentPositions[i] & 1 == 1) {
                 if (i != 0 && (levelState.currentPositions[i - 1] == (levelState.currentPositions[i] - 1))) {
                     // last node in currentNodes is a sibling, skip now so we hashed it already
                     continue;
                 }
-                levelState.nextNodes[levelPositions.nextNodesFreeSlot] = hasher(
-                    [proof.proofSiblings[levelPositions.proofSiblingsReadPos], levelState.currentNodes[i]]
+                levelState.nextNodes[levelPos.nextNodesFreeSlot] = hasher(
+                    [proof.proofSiblings[levelPos.proofSiblingsReadPos], levelState.currentNodes[i]]
                 );
-                levelState.nextPositions[levelPositions.nextNodesFreeSlot] = levelState.currentPositions[i] >> 1;
+                levelState.nextPositions[levelPos.nextNodesFreeSlot] = levelState.currentPositions[i] >> 1;
 
                 unchecked {
-                    ++levelPositions.nextNodesFreeSlot;
-                    ++levelPositions.proofSiblingsReadPos;
+                    ++levelPos.nextNodesFreeSlot;
+                    ++levelPos.proofSiblingsReadPos;
                 }
             } else {
                 // make sure node index is not at the edge because edges should be carried up a level
                 // TODO these variable names are so long the auto format makes the code unreadable
-                if (levelState.currentPositions[i] != levelPositions.edgePos) {
+                if (levelState.currentPositions[i] != levelPos.edgePos) {
                     if (
-                        (i + 1) < levelPositions.currentNodesFreeSlot &&
+                        (i + 1) < levelPos.currentNodesFreeSlot &&
                         (levelState.currentPositions[i + 1] == (levelState.currentPositions[i] + 1))
                     ) {
                         // sibling is in currentNodes to the left, so use that instead
-                        levelState.nextNodes[levelPositions.nextNodesFreeSlot] = hasher(
+                        levelState.nextNodes[levelPos.nextNodesFreeSlot] = hasher(
                             [levelState.currentNodes[i], levelState.currentNodes[i + 1]]
                         );
-                        levelState.nextPositions[levelPositions.nextNodesFreeSlot] =
-                            levelState.currentPositions[i] >>
-                            1;
+                        levelState.nextPositions[levelPos.nextNodesFreeSlot] = levelState.currentPositions[i] >> 1;
+
+                        // node == self.sideNodes[level]. But that is not safe so we check if edgeNode is sibling
+                        // by simply checking if currentPos and edge pos line up on the next level ( >> 1)
+                        if (levelState.currentPositions[i] >> 1 == levelPos.edgePos >> 1) {
+                            // same parent on next level, so newNode is a left sibling of !
+                            newSideNode = levelState.nextNodes[levelPos.nextNodesFreeSlot];
+                            isNewSideNode = true;
+                        }
                     } else {
-                        levelState.nextNodes[levelPositions.nextNodesFreeSlot] = hasher(
-                            [levelState.currentNodes[i], proof.proofSiblings[levelPositions.proofSiblingsReadPos]]
+                        levelState.nextNodes[levelPos.nextNodesFreeSlot] = hasher(
+                            [levelState.currentNodes[i], proof.proofSiblings[levelPos.proofSiblingsReadPos]]
                         );
-                        levelState.nextPositions[levelPositions.nextNodesFreeSlot] =
-                            levelState.currentPositions[i] >>
-                            1;
+                        levelState.nextPositions[levelPos.nextNodesFreeSlot] = levelState.currentPositions[i] >> 1;
+
+                        // it is an edge node, but do we even need it for the next insert?
+                        // we check by taking the next inserts index (proof.edgeIndex + 1), to current level,
+                        // then checking if that next insert leaf lays right, thus needing: hash(newSideNode, leaf)
+                        if (((proof.edgeIndex + 1) >> level) & 1 == 1) {
+                            // cary up this side node, it dangles
+                            newSideNode = levelState.nextNodes[levelPos.nextNodesFreeSlot];
+                            isNewSideNode = true;
+                        }
 
                         unchecked {
-                            ++levelPositions.proofSiblingsReadPos;
+                            ++levelPos.proofSiblingsReadPos;
                         }
                     }
                 } else {
-                    // it's an edge not and should be carried up a level. (TODO verify this is true claude claimed this)
-                    levelState.nextNodes[levelPositions.nextNodesFreeSlot] = levelState.currentNodes[i];
-                    levelState.nextPositions[levelPositions.nextNodesFreeSlot] = levelState.currentPositions[i] >> 1;
+                    levelState.nextNodes[levelPos.nextNodesFreeSlot] = levelState.currentNodes[i];
+                    levelState.nextPositions[levelPos.nextNodesFreeSlot] = levelState.currentPositions[i] >> 1;
                 }
-                ++levelPositions.nextNodesFreeSlot;
+                ++levelPos.nextNodesFreeSlot;
             }
         }
 
         // per level updates
-        levelPositions.edgePos >>= 1;
+        levelPos.edgePos >>= 1;
 
-        for (uint256 k = 0; k < levelPositions.nextNodesFreeSlot; k++) {
+        for (uint256 k = 0; k < levelPos.nextNodesFreeSlot; k++) {
             levelState.currentNodes[k] = levelState.nextNodes[k];
             levelState.currentPositions[k] = levelState.nextPositions[k];
         }
-        levelPositions.currentNodesFreeSlot = levelPositions.nextNodesFreeSlot;
-        levelPositions.nextNodesFreeSlot = 0;
-        return (levelState, levelPositions);
+        levelPos.currentNodesFreeSlot = levelPos.nextNodesFreeSlot;
+        levelPos.nextNodesFreeSlot = 0;
+        return (levelState, levelPos, newSideNode, isNewSideNode);
     }
 
+    struct ProvenNewSideNodes {
+        uint256[] newSideNodes;
+        bool[] isNewSideNodes;
+    }
+
+    // TODO maybe dont do ProvenNewSideNodes since it might be better to do for loop inside _updateMany
+    // would save 2 array in memory, more importantly stack pressure
     function _proofManyToRoot(
         MultiProof memory proof,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal view returns (uint256) {
+    ) internal view returns (uint256, ProvenNewSideNodes memory) {
         uint256 leafCount = proof.leaves.length;
         if (leafCount == 0 || leafCount != proof.leafIndexes.length) {
             revert WrongMultiProof();
@@ -808,8 +865,22 @@ library InternalSkinnyIMT {
         }
         levelPositions.currentNodesFreeSlot = leafCount;
 
+        ProvenNewSideNodes memory provenNewSideNodes = ProvenNewSideNodes(
+            new uint256[](proof.treeDepth),
+            new bool[](proof.treeDepth)
+        );
         for (uint256 level = 0; level < proof.treeDepth; ) {
-            (levelState, levelPositions) = _hashMultiProofLevel(proof, levelState, levelPositions, hasher);
+            uint256 newSideNode;
+            bool isNewSideNode;
+            (levelState, levelPositions, newSideNode, isNewSideNode) = _hashMultiProofLevel(
+                level,
+                proof,
+                levelState,
+                levelPositions,
+                hasher
+            );
+            provenNewSideNodes.newSideNodes[level] = newSideNode;
+            provenNewSideNodes.isNewSideNodes[level] = isNewSideNode;
 
             unchecked {
                 ++level;
@@ -821,7 +892,7 @@ library InternalSkinnyIMT {
         if (levelPositions.proofSiblingsReadPos != proof.proofSiblings.length) {
             revert WrongMultiProof();
         }
-        return levelState.currentNodes[0];
+        return (levelState.currentNodes[0], provenNewSideNodes);
     }
 
     /// @dev Retrieves the root of the tree from the 'sideNodes' mapping using the
@@ -832,3 +903,10 @@ library InternalSkinnyIMT {
         return self.sideNodes[self.depth];
     }
 }
+
+// @notes contract size limit work around: use _hashMultiProofLevel for both proofManyToRoot as updateMany
+// same with plain update
+// _hashMultiProofLevel uses 2 arrays for tracking nodes. currentLevel and nextLevel. You can prob just do it in 1
+// same for insertMany probably, but that is vivians code so i would rather keep it as similar as possible
+// and ofc we can just split into multiple contracts that export these internal functions. example move verify functions
+// outside of SkinnyIMTPoseidon2
