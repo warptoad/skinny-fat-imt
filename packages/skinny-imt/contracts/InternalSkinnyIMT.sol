@@ -737,6 +737,9 @@ library InternalSkinnyIMT {
         uint256 nextNodesFreeSlot;
         uint256 proofSiblingsReadPos;
         uint256 edgePos;
+        uint256 level;
+        uint256 newSideNode;
+        bool isNewSideNode;
     }
 
     /// @dev Folds one tree level: reads the known nodes in `currentNodes` (positions in
@@ -746,15 +749,31 @@ library InternalSkinnyIMT {
     /// is where dangling (a leaf or an internal node with no right neighbor) is resolved,
     /// entirely from the tree's `edgeIndex`, not from any caller-supplied schedule.
     function _hashMultiProofLevel(
-        uint256 level,
         MultiProof memory proof,
         MultiProofLevelState memory levelState,
         MultiProofArrLevelPositions memory levelPos,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) private view returns (MultiProofLevelState memory, MultiProofArrLevelPositions memory, uint256, bool) {
-        uint256 newSideNode;
-        bool isNewSideNode;
+    ) private view returns (MultiProofLevelState memory, MultiProofArrLevelPositions memory) {
+        // The sideNode at this level is, by definition, the node at position (treeSize >> level) - 1,
+        // and it only exists (is read by a future insert) when this level is live: (treeSize >> level) & 1 == 1.
+        // That position is always even (a left / left-frontier node), so the main loop below always visits it
+        // (only odd siblings are skipped via `continue`). When not live, use a sentinel that no position matches.
+        // If that exact node is among the ones we recompute, we hand its new value back so the caller can store
+        // it into self.sideNodes[level]. This uniformly covers the "shares a parent with the edge" case and the
+        // dangling-edge case, and stores the node AT this level (never its parent).
+        uint256 treeSize = proof.edgeIndex + 1;
+        uint256 frontierPos = ((treeSize >> levelPos.level) & 1 == 1)
+            ? (treeSize >> levelPos.level) - 1
+            : type(uint256).max;
+
         for (uint256 i = 0; i < levelPos.currentNodesFreeSlot; i++) {
+            if (levelState.currentPositions[i] == frontierPos) {
+                levelPos.newSideNode = levelState.currentNodes[i];
+                levelPos.isNewSideNode = true;
+            } else {
+                levelPos.isNewSideNode = false;
+            }
+
             // hash left or right
             if (levelState.currentPositions[i] & 1 == 1) {
                 if (i != 0 && (levelState.currentPositions[i - 1] == (levelState.currentPositions[i] - 1))) {
@@ -783,28 +802,11 @@ library InternalSkinnyIMT {
                             [levelState.currentNodes[i], levelState.currentNodes[i + 1]]
                         );
                         levelState.nextPositions[levelPos.nextNodesFreeSlot] = levelState.currentPositions[i] >> 1;
-
-                        // node == self.sideNodes[level]. But that is not safe so we check if edgeNode is sibling
-                        // by simply checking if currentPos and edge pos line up on the next level ( >> 1)
-                        if (levelState.currentPositions[i] >> 1 == levelPos.edgePos >> 1) {
-                            // same parent on next level, so newNode is a left sibling of !
-                            newSideNode = levelState.nextNodes[levelPos.nextNodesFreeSlot];
-                            isNewSideNode = true;
-                        }
                     } else {
                         levelState.nextNodes[levelPos.nextNodesFreeSlot] = hasher(
                             [levelState.currentNodes[i], proof.proofSiblings[levelPos.proofSiblingsReadPos]]
                         );
                         levelState.nextPositions[levelPos.nextNodesFreeSlot] = levelState.currentPositions[i] >> 1;
-
-                        // it is an edge node, but do we even need it for the next insert?
-                        // we check by taking the next inserts index (proof.edgeIndex + 1), to current level,
-                        // then checking if that next insert leaf lays right, thus needing: hash(newSideNode, leaf)
-                        if (((proof.edgeIndex + 1) >> level) & 1 == 1) {
-                            // cary up this side node, it dangles
-                            newSideNode = levelState.nextNodes[levelPos.nextNodesFreeSlot];
-                            isNewSideNode = true;
-                        }
 
                         unchecked {
                             ++levelPos.proofSiblingsReadPos;
@@ -827,20 +829,14 @@ library InternalSkinnyIMT {
         }
         levelPos.currentNodesFreeSlot = levelPos.nextNodesFreeSlot;
         levelPos.nextNodesFreeSlot = 0;
-        return (levelState, levelPos, newSideNode, isNewSideNode);
+        return (levelState, levelPos);
     }
 
-    struct ProvenNewSideNodes {
-        uint256[] newSideNodes;
-        bool[] isNewSideNodes;
-    }
-
-    // TODO maybe dont do ProvenNewSideNodes since it might be better to do for loop inside _updateMany
     // would save 2 array in memory, more importantly stack pressure
     function _proofManyToRoot(
         MultiProof memory proof,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal view returns (uint256, ProvenNewSideNodes memory) {
+    ) internal view returns (uint256) {
         uint256 leafCount = proof.leaves.length;
         if (leafCount == 0 || leafCount != proof.leafIndexes.length) {
             revert WrongMultiProof();
@@ -853,7 +849,15 @@ library InternalSkinnyIMT {
             new uint256[](leafCount)
         );
 
-        MultiProofArrLevelPositions memory levelPositions = MultiProofArrLevelPositions(0, 0, 0, proof.edgeIndex);
+        MultiProofArrLevelPositions memory levelPositions = MultiProofArrLevelPositions(
+            0,
+            0,
+            0,
+            proof.edgeIndex,
+            0,
+            0,
+            false
+        );
 
         // Seed every proven leaf at level 0, at its real index. Each leaf is then hashed up
         // from the bottom, so an internal-node value or a wrong index simply produces a
@@ -865,22 +869,9 @@ library InternalSkinnyIMT {
         }
         levelPositions.currentNodesFreeSlot = leafCount;
 
-        ProvenNewSideNodes memory provenNewSideNodes = ProvenNewSideNodes(
-            new uint256[](proof.treeDepth),
-            new bool[](proof.treeDepth)
-        );
         for (uint256 level = 0; level < proof.treeDepth; ) {
-            uint256 newSideNode;
-            bool isNewSideNode;
-            (levelState, levelPositions, newSideNode, isNewSideNode) = _hashMultiProofLevel(
-                level,
-                proof,
-                levelState,
-                levelPositions,
-                hasher
-            );
-            provenNewSideNodes.newSideNodes[level] = newSideNode;
-            provenNewSideNodes.isNewSideNodes[level] = isNewSideNode;
+            levelPositions.level = level;
+            (levelState, levelPositions) = _hashMultiProofLevel(proof, levelState, levelPositions, hasher);
 
             unchecked {
                 ++level;
@@ -892,7 +883,7 @@ library InternalSkinnyIMT {
         if (levelPositions.proofSiblingsReadPos != proof.proofSiblings.length) {
             revert WrongMultiProof();
         }
-        return (levelState.currentNodes[0], provenNewSideNodes);
+        return levelState.currentNodes[0];
     }
 
     /// @dev Retrieves the root of the tree from the 'sideNodes' mapping using the
@@ -910,3 +901,175 @@ library InternalSkinnyIMT {
 // same for insertMany probably, but that is vivians code so i would rather keep it as similar as possible
 // and ofc we can just split into multiple contracts that export these internal functions. example move verify functions
 // outside of SkinnyIMTPoseidon2
+
+// old unused code
+// this is not used because it only adds to contract size and gas of these functions.
+// it does read easier and more consistently with the other implementation
+//------------ update and proofToRoot written with hashLevel pattern like updateMany and proofManyToRoot -------------
+// /// @dev Updates the value of an existing leaf and recalculates hashes
+// /// to maintain tree integrity.
+// /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+// /// @param oldLeaf: The value of the leaf that is to be updated.
+// /// @param newLeaf: The new value that will replace the oldLeaf in the tree.
+// /// @param leafIndex: The index of the leaf to be updated.
+// /// @param proofSiblings: An array of sibling nodes that are necessary to recalculate the path to the root.
+// /// @return The new hash of the updated node after the leaf has been updated.
+// /// @notice Requires collision-resistant hashing: `if (self.sideNodes[level] == oldRoot)` identifies
+// /// which sideNode to refresh by hash equality,
+// /// so a collision between two distinct subtree roots would corrupt tree state silently.
+// /// @notice Contracts using this function with snark based hash functions,
+// /// need to check that the old and newLeaf and proofSiblings are within the snark scalar field.
+// function _update(
+//     SkinnyIMTData storage self,
+//     uint256 oldLeaf,
+//     uint256 newLeaf,
+//     uint256 leafIndex,
+//     uint256[] calldata proofSiblings,
+//     function(uint256[2] memory) view returns (uint256) hasher
+// ) internal returns (uint256) {
+//     if (_isInitialized(self) == false) {
+//         revert NotInitialized();
+//     }
+//     // Cache tree depth to optimize gas
+//     uint256 treeDepth = self.depth;
+//     if (proofSiblings.length > treeDepth) {
+//         revert WrongSiblingNodes();
+//     }
+
+//     uint256 treeSize = self.size;
+
+//     // 2 vars to store intermediate hashes, to hash up to oldRoot and newRoot
+//     uint256 newNode = newLeaf;
+//     uint256 oldNode = oldLeaf;
+
+//     ProofLevelPositions memory oldLevelPos = ProofLevelPositions(
+//         leafIndex, // nodeIndex
+//         treeSize - 1, // edgeIndex
+//         treeSize, // nextInsertIndex
+//         0, // proofSiblingReadIndex
+//         0, // newSideNode
+//         false // isNewSideNode
+//     );
+//     ProofLevelPositions memory newLevelPos = ProofLevelPositions(
+//         leafIndex, // nodeIndex
+//         treeSize - 1, // edgeIndex
+//         treeSize, // nextInsertIndex
+//         0, // proofSiblingReadIndex
+//         0, // newSideNode
+//         false // isNewSideNode
+//     );
+//     for (uint256 level = 0; level < treeDepth; ) {
+//         // oldNode is just inclusion proof, so trackSideNodes=false, and we will use the same positions for newNode
+//         // so trackPositions=false
+//         (oldNode, oldLevelPos) = _hashProofLevel(oldNode, oldLevelPos, proofSiblings, hasher);
+//         (newNode, newLevelPos) = _hashProofLevel(newNode, newLevelPos, proofSiblings, hasher);
+//         if (newLevelPos.isNewSideNode) {
+//             self.sideNodes[level] = newLevelPos.newSideNode;
+//         }
+//         unchecked {
+//             ++level;
+//         }
+//     }
+
+//     if (oldNode != _root(self)) {
+//         revert WrongSiblingNodes();
+//     }
+
+//     self.sideNodes[treeDepth] = newNode;
+
+//     return newNode;
+// }
+
+// struct ProofLevelPositions {
+//     uint256 nodeIndex;
+//     uint256 edgeIndex;
+//     uint256 nextInsertIndex;
+//     uint256 siblingIndex;
+//     uint256 newSideNode;
+//     bool isNewSideNode;
+// }
+
+// function _hashProofLevel(
+//     uint256 node,
+//     ProofLevelPositions memory levelPos,
+//     uint256[] calldata proofSiblings,
+//     function(uint256[2] memory) view returns (uint256) hasher
+// ) internal view returns (uint256, ProofLevelPositions memory) {
+//     // The sideNode at this level is the node at position nextInsertIndex - 1, and only when this level
+//     // is live (nextInsertIndex is odd). For a single-leaf update the one node we recompute (`node`, at
+//     // position nodeIndex) is that sideNode exactly when nodeIndex == nextInsertIndex - 1. Write the result
+//     // into the struct so the caller sees it; reset the flag each level since `levelPos` is reused.
+//     if (levelPos.nextInsertIndex & 1 == 1 && (levelPos.nextInsertIndex - 1) == levelPos.nodeIndex) {
+//         levelPos.newSideNode = node;
+//         levelPos.isNewSideNode = true;
+//     } else {
+//         levelPos.isNewSideNode = false;
+//     }
+//     if (levelPos.nodeIndex & 1 == 1) {
+//         node = hasher([proofSiblings[levelPos.siblingIndex], node]);
+//         unchecked {
+//             ++levelPos.siblingIndex;
+//         }
+//     } else {
+//         // make sure node index is not at the edge @TODO explain
+//         if (levelPos.nodeIndex != levelPos.edgeIndex) {
+//             node = hasher([node, proofSiblings[levelPos.siblingIndex]]);
+
+//             unchecked {
+//                 ++levelPos.siblingIndex;
+//             }
+//         }
+//     }
+
+//     levelPos.nodeIndex >>= 1;
+//     levelPos.edgeIndex >>= 1;
+//     levelPos.nextInsertIndex >>= 1;
+
+//     return (node, levelPos);
+// }
+
+// /// @dev Hashes merkle proof and returns the root the leaf belongs to
+// /// @param leafIndex: The leaf to proof inclusion of
+// /// @param leafIndex: The index of the leaf within the tree.
+// /// @param proofSiblings: The sibling nodes along the path from the leaf to the root.
+// /// @return The root obtained from hashing the leaf with the provided siblings.
+// /// @notice Contracts using this function with snark based hash functions,
+// /// need to check that the leaf and proofSiblings are within the snark scalar field.
+// function _proofToRoot(
+//     uint256 treeDepth,
+//     uint256 treeSize,
+//     uint256 leaf,
+//     uint256 leafIndex,
+//     uint256[] calldata proofSiblings,
+//     function(uint256[2] memory) view returns (uint256) hasher
+// ) internal view returns (uint256) {
+//     if (treeSize == 0) {
+//         revert TreeEmpty();
+//     }
+
+//     uint256 node = leaf;
+//     ProofLevelPositions memory levelPos = ProofLevelPositions(
+//         leafIndex, // nodeIndex
+//         // index of the very last leaf in the tree
+//         // tracking this index up the tree, follows the indexes of the nodes in self.sidNodes
+//         treeSize - 1, // edgeIndex
+//         // index of the next insert in the tree, tracking this up to tree to determine
+//         // what sideNode is needed to store
+//         treeSize, // nextInsertIndex
+//         // because leanIMT is not balanced proofSiblings.length can be smaller then tree depth
+//         // we cant just use level so we separately track those 2
+//         0, // proofSiblingReadIndex
+//         0, // newSideNode
+//         false // isNewSideNode
+//     );
+//     for (uint256 level = 0; level < treeDepth; ) {
+//         // no need for sideNodes so trackSideNodes=false
+//         (node, levelPos) = _hashProofLevel(node, levelPos, proofSiblings, hasher);
+
+//         unchecked {
+//             ++level;
+//         }
+//     }
+//     return node;
+// }
+//---------------------------------------------------------------------------------------------------------------------
