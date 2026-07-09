@@ -141,9 +141,7 @@ library SkinnyIMTPoseidon2 {
         // check
         InternalSkinnyIMT._requireInField(newLeaf);
         // @todo what actually breaks if that is not checked? Maybe not checking siblingNodes is fine?
-        for (uint256 i = 0; i < proofSiblings.length; i++) {
-            InternalSkinnyIMT._requireInField(proofSiblings[i]);
-        }
+        _requireAllInField(proofSiblings);
 
         // update tree
         uint256 _root = InternalSkinnyIMT._update(self, oldLeaf, newLeaf, index, proofSiblings, hasher);
@@ -154,6 +152,55 @@ library SkinnyIMTPoseidon2 {
         return _root;
     }
 
+    /// @dev Updates many existing leaves at once, recalculating hashes to maintain tree integrity.
+    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+    /// @param oldLeaves: The current values of the leaves to be updated, in ascending-index order.
+    /// @param newLeaves: The new values, aligned entry-for-entry with `oldLeaves` / `leafIndexes`.
+    /// @param leafIndexes: The real tree indexes of the leaves, ascending and aligned with the leaves.
+    /// @param proofSiblings: The shared multiproof sibling stream (same shape `verifyMany` consumes).
+    /// @return The new root after the leaves have been updated.
+    /// @notice Checks that the newLeaves and proofSiblings are within the snark scalar field.
+    function updateMany(
+        SkinnyIMTData storage self,
+        uint256[] calldata oldLeaves,
+        uint256[] calldata newLeaves,
+        uint256[] calldata leafIndexes,
+        uint256[] calldata proofSiblings
+    ) public returns (uint256) {
+        if (self.size == 0) {
+            revert TreeEmpty();
+        }
+        _requireAllInField(newLeaves);
+        _requireAllInField(proofSiblings);
+
+        // depth/edgeIndex come from the live tree, never the caller. Built into a local (and the
+        // emit loop split into a helper) to keep this frame under the stack-too-deep limit without viaIR.
+        MultiProof memory proof = MultiProof(self.depth, self.size - 1, leafIndexes, proofSiblings);
+        uint256 _root = InternalSkinnyIMT._updateMany(self, oldLeaves, newLeaves, proof, hasher);
+
+        _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
+        return _root;
+    }
+
+    /// @dev Reverts unless every value is within the snark scalar field.
+    function _requireAllInField(uint256[] calldata values) private pure {
+        for (uint256 i = 0; i < values.length; i++) {
+            InternalSkinnyIMT._requireInField(values[i]);
+        }
+    }
+
+    /// @dev Emits one `UpdatedLeaf` per updated leaf, mirroring `update`.
+    function _emitUpdatedMany(
+        uint256 treeId,
+        uint256[] calldata leafIndexes,
+        uint256[] calldata oldLeaves,
+        uint256[] calldata newLeaves
+    ) private {
+        for (uint256 i = 0; i < leafIndexes.length; i++) {
+            emit UpdatedLeaf(treeId, leafIndexes[i], newLeaves[i], oldLeaves[i]);
+        }
+    }
+
     function proofToRoot(
         uint256 treeDepth,
         uint256 treeSize,
@@ -162,26 +209,9 @@ library SkinnyIMTPoseidon2 {
         uint256[] calldata proofSiblings
     ) public view returns (uint256) {
         InternalSkinnyIMT._requireInField(leaf);
-        for (uint256 i = 0; i < proofSiblings.length; i++) {
-            InternalSkinnyIMT._requireInField(proofSiblings[i]);
-        }
+        _requireAllInField(proofSiblings);
         return InternalSkinnyIMT._proofToRoot(treeDepth, treeSize, leaf, leafIndex, proofSiblings, hasher);
     }
-
-    // function verify(
-    //     SkinnyIMTData storage self,
-    //     uint256 leaf,
-    //     uint256 index,
-    //     uint256[] calldata siblingNodes
-    // ) public view returns (bool) {
-    //     InternalSkinnyIMT._requireInField(leaf);
-    //     for (uint256 i = 0; i < siblingNodes.length; i++) {
-    //         InternalSkinnyIMT._requireInField(siblingNodes[i]);
-    //     }
-    //     uint256 _currentRoot = InternalSkinnyIMT._root(self);
-    //     uint256 _provenRoot = InternalSkinnyIMT._proofToRoot(self.depth, self.size, leaf, index, siblingNodes, hasher);
-    //     return _currentRoot == _provenRoot;
-    // }
 
     function proofManyToRoot(
         uint256 treeDepth,
@@ -190,41 +220,16 @@ library SkinnyIMTPoseidon2 {
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
     ) public view returns (uint256) {
-        for (uint256 i = 0; i < leaves.length; i++) {
-            InternalSkinnyIMT._requireInField(leaves[i]);
-        }
-        for (uint256 i = 0; i < proofSiblings.length; i++) {
-            InternalSkinnyIMT._requireInField(proofSiblings[i]);
-        }
+        _requireAllInField(leaves);
+        _requireAllInField(proofSiblings);
         uint256 provenRoot = InternalSkinnyIMT._proofManyToRoot(
-            MultiProof(treeDepth, edgeIndex, leaves, leafIndexes, proofSiblings),
+            leaves,
+            MultiProof(treeDepth, edgeIndex, leafIndexes, proofSiblings),
             hasher
         );
 
         return provenRoot;
     }
-
-    // function verifyMany(
-    //     SkinnyIMTData storage self,
-    //     uint256[] calldata leaves,
-    //     uint256[] calldata leafIndexes,
-    //     uint256[] calldata proofSiblings
-    // ) public view returns (bool) {
-    //     for (uint256 i = 0; i < leaves.length; i++) {
-    //         InternalSkinnyIMT._requireInField(leaves[i]);
-    //     }
-    //     for (uint256 i = 0; i < proofSiblings.length; i++) {
-    //         InternalSkinnyIMT._requireInField(proofSiblings[i]);
-    //     }
-    //     if (self.size == 0) {
-    //         revert TreeEmpty();
-    //     }
-    //     uint256 computedRoot = InternalSkinnyIMT._proofManyToRoot(
-    //         MultiProof(self.depth, self.size - 1, leaves, leafIndexes, proofSiblings),
-    //         hasher
-    //     );
-    //     return computedRoot == InternalSkinnyIMT._root(self);
-    // }
 
     /// @dev Retrieves the root of the tree from the 'sideNodes' mapping using the
     /// current tree depth.

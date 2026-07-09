@@ -7,5 +7,6 @@ runSkinnyIMTTests({
     deployTaskName: "deploy:imt-poseidon2-test",
     libraryName: "SkinnyIMTPoseidon2",
     hashFn: (a, b) => poseidon2Hash([a, b]),
-    hasVerifyMany: true
+    hasVerifyMany: true,
+    hasUpdateMany: true
 })

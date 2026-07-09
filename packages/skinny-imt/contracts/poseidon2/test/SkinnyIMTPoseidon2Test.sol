@@ -41,6 +41,15 @@ contract SkinnyIMTPoseidon2Test {
         SkinnyIMTPoseidon2.update(data, oldLeaf, newLeaf, index, siblingNodes);
     }
 
+    function updateMany(
+        uint256[] calldata oldLeaves,
+        uint256[] calldata newLeaves,
+        uint256[] calldata leafIndexes,
+        uint256[] calldata proofSiblings
+    ) external {
+        SkinnyIMTPoseidon2.updateMany(data, oldLeaves, newLeaves, leafIndexes, proofSiblings);
+    }
+
     // verify/verifyMany are wrapped as state-changing (event-emitting) txs rather than
     // plain `view` so they appear in the hardhat gas report. Tests read the boolean
     // result via `.staticCall` and send the real tx to record gas.

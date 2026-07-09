@@ -205,7 +205,8 @@ library SkinnyIMTPoseidon2FullNode {
             InternalSkinnyIMT._requireInField(proofSiblings[i]);
         }
         uint256 provenRoot = InternalSkinnyIMT._proofManyToRoot(
-            MultiProof(treeDepth, edgeIndex, leaves, leafIndexes, proofSiblings),
+            leaves,
+            MultiProof(treeDepth, edgeIndex, leafIndexes, proofSiblings),
             hasher
         );
         return provenRoot;
