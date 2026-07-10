@@ -3,8 +3,13 @@
 pragma solidity ^0.8.4;
 
 import {SkinnyIMTPoseidon2, SkinnyIMTData} from "../SkinnyIMTPoseidon2.sol";
-// TODO move here
-import {TreeEmpty} from "../../InternalSkinnyIMT.sol";
+import {SkinnyIMTPoseidon2Verify} from "../SkinnyIMTPoseidon2Verify.sol";
+
+// verify/verifyMany are wrapped as state-changing (event-emitting) txs rather than
+// plain `view` so they appear in the hardhat gas report. Tests read the boolean
+// result via `.staticCall` and send the real tx to record gas.
+event VerifyResult(bool result);
+event VerifyManyResult(bool result);
 
 contract SkinnyIMTPoseidon2Test {
     SkinnyIMTData internal data;
@@ -50,16 +55,8 @@ contract SkinnyIMTPoseidon2Test {
         SkinnyIMTPoseidon2.updateMany(data, oldLeaves, newLeaves, leafIndexes, proofSiblings);
     }
 
-    // verify/verifyMany are wrapped as state-changing (event-emitting) txs rather than
-    // plain `view` so they appear in the hardhat gas report. Tests read the boolean
-    // result via `.staticCall` and send the real tx to record gas.
-    event VerifyResult(bool result);
-    event VerifyManyResult(bool result);
-
     function verify(uint256 leaf, uint256 index, uint256[] calldata siblingsNodes) external returns (bool) {
-        uint256 _currentRoot = SkinnyIMTPoseidon2.root(data);
-        uint256 _provenRoot = SkinnyIMTPoseidon2.proofToRoot(data.depth, data.size, leaf, index, siblingsNodes);
-        bool result = _currentRoot == _provenRoot;
+        bool result = SkinnyIMTPoseidon2Verify.verify(data, leaf, index, siblingsNodes);
         emit VerifyResult(result);
         return result;
     }
@@ -69,17 +66,7 @@ contract SkinnyIMTPoseidon2Test {
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
     ) external returns (bool) {
-        if (data.size == 0) {
-            revert TreeEmpty();
-        }
-        uint256 computedRoot = SkinnyIMTPoseidon2.proofManyToRoot(
-            data.depth,
-            data.size - 1,
-            leaves,
-            leafIndexes,
-            proofSiblings
-        );
-        bool result = computedRoot == SkinnyIMTPoseidon2.root(data);
+        bool result = SkinnyIMTPoseidon2Verify.verifyMany(data, leaves, leafIndexes, proofSiblings);
         emit VerifyManyResult(result);
         return result;
     }

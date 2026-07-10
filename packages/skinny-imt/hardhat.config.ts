@@ -11,10 +11,7 @@ const hardhatConfig: HardhatUserConfig = {
         settings: {
             optimizer: {
                 enabled: true,
-                //runs: 200
-                // @TODO poseidon2 size too big, should do external call instead
-                //runs: 2 ** 32 - 1,
-                runs: 2 ** (32 - 20) - 1
+                runs: 2 ** 32 - 1
             }
         }
     },

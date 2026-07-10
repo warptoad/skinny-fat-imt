@@ -28,14 +28,6 @@ struct SkinnyIMTData {
     mapping(uint256 => uint256) repeatedHashCache;
 }
 
-// added storage of the leaves to allow syncing with full nodes for leaves older then 1 year
-struct SkinnyIMTFullNodeData {
-    // arrays cost more but store in consecutive slots which allows for usage of debug_storageRangeAt
-    // to read this extremely fast
-    uint256[] leaves;
-    SkinnyIMTData skinnyData;
-}
-
 struct MultiProof {
     uint256 treeDepth;
     uint256 edgeIndex;
@@ -47,7 +39,6 @@ error WrongSiblingNodes();
 error LeafDoesNotExist();
 error NotInitialized();
 error AlreadyInitialized();
-error LeafGreaterThanSnarkScalarField();
 error WrongMultiProof();
 error TreeEmpty();
 
@@ -58,19 +49,12 @@ error TreeEmpty();
 /// the node's value becomes that of its left child. Furthermore, rather than utilizing a static tree depth,
 /// it is updated based on the number of leaves in the tree. This approach
 /// results in the calculation of significantly fewer hashes, making the tree more efficient.
-library InternalSkinnyIMT {
+library InternalSkinnyIMTCore {
     /// @dev Checks whether the tree has been initialized.
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @return True if the tree has been initialized, false otherwise.
     function _isInitialized(SkinnyIMTData storage self) internal view returns (bool) {
         return self.treeId != 0;
-    }
-
-    /// @dev Reverts with `LeafGreaterThanSnarkScalarField` if `v` is not in the BN254 scalar field.
-    function _requireInField(uint256 v) internal pure {
-        if (v >= SNARK_SCALAR_FIELD) {
-            revert LeafGreaterThanSnarkScalarField();
-        }
     }
 
     /// @dev Initializes the tree by assigning it a non-zero `treeId` derived from its storage slot.
