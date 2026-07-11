@@ -1,12 +1,12 @@
 import { task, types } from "hardhat/config"
 import { createPublicClient, createWalletClient, custom } from "viem"
 import { hardhat } from "viem/chains"
-import { SkinnyIMTPoseidon2__factory } from "../typechain-types"
+import { FatIMTPoseidon2__factory } from "../typechain-types"
 //import { deployPoseidon2Huff } from "@warptoad/gigabridge-js"
 import { proxy } from "poseidon-solidity"
 import { ethers } from "ethers"
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers"
-import { SkinnyIMTPoseidon2Test__factory } from "../typechain-types"
+import { FatIMTPoseidon2Test__factory } from "../typechain-types"
 
 import * as Poseidon2Yul_BN254from from "poseidon2-evm/out/Poseidon2Yul.sol/Poseidon2Yul_BN254.json"
 
@@ -65,7 +65,7 @@ task("deploy:imt-poseidon2-test", "Deploy an IMT contract for testing a library"
 
         const LibraryFactory = (await ethers.getContractFactory(libraryName, {
             libraries: {}
-        })) as SkinnyIMTPoseidon2__factory
+        })) as FatIMTPoseidon2__factory
 
         const library = await LibraryFactory.deploy()
         const libraryAddress = await library.getAddress()
@@ -76,18 +76,18 @@ task("deploy:imt-poseidon2-test", "Deploy an IMT contract for testing a library"
 
         // Stateless proof verification was split into its own library to keep the main library
         // under the contract size limit; the test contract links both.
-        const VerifyFactory = await ethers.getContractFactory("SkinnyIMTPoseidon2Verify", { libraries: {} })
+        const VerifyFactory = await ethers.getContractFactory("FatIMTPoseidon2Verify", { libraries: {} })
         const verifyLibrary = await VerifyFactory.deploy()
         const verifyLibraryAddress = await verifyLibrary.getAddress()
 
         if (logs) {
-            console.info(`SkinnyIMTPoseidon2Verify library has been deployed to: ${verifyLibraryAddress}`)
+            console.info(`FatIMTPoseidon2Verify library has been deployed to: ${verifyLibraryAddress}`)
         }
 
         const ContractFactory = await ethers.getContractFactory(`${libraryName}Test`, {
             libraries: {
                 [libraryName]: libraryAddress,
-                SkinnyIMTPoseidon2Verify: verifyLibraryAddress
+                FatIMTPoseidon2Verify: verifyLibraryAddress
             }
         })
 

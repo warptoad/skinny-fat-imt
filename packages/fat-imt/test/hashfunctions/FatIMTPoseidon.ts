@@ -1,8 +1,8 @@
 import { poseidon2 } from "poseidon-lite"
-import { runSkinnyIMTTests } from "../shared/skinnyIMTTests"
+import { runFatIMTTests } from "../shared/fatIMTTests"
 
-runSkinnyIMTTests({
+runFatIMTTests({
     deployTaskName: "deploy:imt-poseidon-test",
-    libraryName: "SkinnyIMTPoseidon",
+    libraryName: "FatIMTPoseidon",
     hashFn: (a, b) => poseidon2([a, b])
 })

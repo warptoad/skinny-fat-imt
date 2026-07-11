@@ -1,26 +1,26 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
+import {LibPoseidon2Yul} from "poseidon2-evm/src/bn254/yul/LibPoseidon2Yul.sol";
 
-import {InternalSkinnyIMTEvent} from "../InternalSkinnyIMTEvent.sol";
-import {SkinnyIMTData} from "../InternalSkinnyIMTCore.sol";
-import {TreeEmpty} from "../InternalSkinnyIMTCore.sol";
+import {InternalFatIMTEvent} from "../InternalFatIMTEvent.sol";
+import {FatIMTData} from "../InternalFatIMTCore.sol";
+import {TreeEmpty} from "../InternalFatIMTCore.sol";
 
-/// @title SkinnyIMTPoseidonVerify
+/// @title FatIMTPoseidon2Verify
 /// @notice Stateless proof verification (`proofToRoot` / `proofManyToRoot`) split out of
-/// `SkinnyIMTPoseidon2` and `SkinnyIMTPoseidon2FullNode` to keep those libraries under the
+/// `FatIMTPoseidon2` and `FatIMTPoseidon2FullNode` to keep those libraries under the
 /// EIP-170 contract size limit. Both functions take the whole proof as parameters and touch no
 /// storage, so a single library serves the plain and full-node trees alike.
-library SkinnyIMTPoseidonVerify {
-    using InternalSkinnyIMTEvent for *;
+library FatIMTPoseidon2Verify {
+    using InternalFatIMTEvent for *;
 
-    function hasher(uint256[2] memory input) internal pure returns (uint256) {
-        return PoseidonT3.hash(input);
+    function hasher(uint256[2] memory leaves) public pure returns (uint256) {
+        return LibPoseidon2Yul.hash_2(leaves[0], leaves[1]);
     }
 
-    function root(SkinnyIMTData storage self) public view returns (uint256) {
-        return InternalSkinnyIMTEvent._root(self);
+    function root(FatIMTData storage self) public view returns (uint256) {
+        return InternalFatIMTEvent._root(self);
     }
 
     function proofToRootBN254(
@@ -30,7 +30,7 @@ library SkinnyIMTPoseidonVerify {
         uint256 leafIndex,
         uint256[] calldata proofSiblings
     ) public view returns (uint256) {
-        return InternalSkinnyIMTEvent._proofToRootBN254(treeDepth, treeSize, leaf, leafIndex, proofSiblings, hasher);
+        return InternalFatIMTEvent._proofToRootBN254(treeDepth, treeSize, leaf, leafIndex, proofSiblings, hasher);
     }
 
     function proofManyToRootBN254(
@@ -41,18 +41,11 @@ library SkinnyIMTPoseidonVerify {
         uint256[] calldata proofSiblings
     ) public view returns (uint256) {
         return
-            InternalSkinnyIMTEvent._proofManyToRootBN254(
-                treeDepth,
-                edgeIndex,
-                leaves,
-                leafIndexes,
-                proofSiblings,
-                hasher
-            );
+            InternalFatIMTEvent._proofManyToRootBN254(treeDepth, edgeIndex, leaves, leafIndexes, proofSiblings, hasher);
     }
 
     function verify(
-        SkinnyIMTData storage self,
+        FatIMTData storage self,
         uint256 leaf,
         uint256 leafIndex,
         uint256[] calldata proofSiblings
@@ -60,7 +53,7 @@ library SkinnyIMTPoseidonVerify {
         if (self.size == 0) {
             revert TreeEmpty();
         }
-        uint256 provenRoot = InternalSkinnyIMTEvent._proofToRootBN254(
+        uint256 provenRoot = InternalFatIMTEvent._proofToRootBN254(
             self.depth,
             self.size,
             leaf,
@@ -68,12 +61,12 @@ library SkinnyIMTPoseidonVerify {
             proofSiblings,
             hasher
         );
-        uint256 currentRoot = InternalSkinnyIMTEvent._root(self);
+        uint256 currentRoot = InternalFatIMTEvent._root(self);
         return provenRoot == currentRoot;
     }
 
     function verifyMany(
-        SkinnyIMTData storage self,
+        FatIMTData storage self,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
@@ -82,7 +75,7 @@ library SkinnyIMTPoseidonVerify {
             revert TreeEmpty();
         }
         uint256 edgeIndex = self.size - 1;
-        uint256 provenRoot = InternalSkinnyIMTEvent._proofManyToRootBN254(
+        uint256 provenRoot = InternalFatIMTEvent._proofManyToRootBN254(
             self.depth,
             edgeIndex,
             leaves,
@@ -90,7 +83,7 @@ library SkinnyIMTPoseidonVerify {
             proofSiblings,
             hasher
         );
-        uint256 currentRoot = InternalSkinnyIMTEvent._root(self);
+        uint256 currentRoot = InternalFatIMTEvent._root(self);
         return provenRoot == currentRoot;
     }
 }

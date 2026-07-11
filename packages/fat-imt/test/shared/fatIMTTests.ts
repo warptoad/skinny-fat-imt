@@ -6,7 +6,7 @@ import { run } from "hardhat"
 // see: https://github.com/zk-kit/zk-kit/issues/419
 // these test do a for loop on (regular) insert instead as a workaround
 
-export interface SkinnyIMTTestConfig {
+export interface FatIMTTestConfig {
     deployTaskName: string
     libraryName: string
     hashFn: (a: bigint, b: bigint) => bigint
@@ -73,15 +73,15 @@ function generateMultiProof(
     }
 }
 
-export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
+export function runFatIMTTests(config: FatIMTTestConfig) {
     const { deployTaskName, libraryName, hashFn, hasSnarkFieldCheck = true } = config
 
-    describe("SkinnyIMT", () => {
+    describe("FatIMT", () => {
         const SNARK_SCALAR_FIELD = BigInt(
             "21888242871839275222246405745257275088548364400416034343698204186575808495617"
         )
-        let skinnyIMTTest: any
-        let skinnyIMT: any
+        let fatIMTTest: any
+        let fatIMT: any
         let jsLeanIMT: JSLeanIMT
 
         beforeEach(async () => {
@@ -90,8 +90,8 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 logs: false
             })
 
-            skinnyIMTTest = contract
-            skinnyIMT = library
+            fatIMTTest = contract
+            fatIMT = library
             jsLeanIMT = new JSLeanIMT((a, b) => hashFn(a, b))
         })
 
@@ -101,33 +101,30 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
         // not the bool. This requires the test contract to expose verify/verifyMany as
         // non-view txs (as the poseidon2 suite does); the `.wait()` fails on a `view` one.
         async function callVerify(leaf: any, index: any, siblings: any): Promise<boolean> {
-            await (await skinnyIMTTest.verify(leaf, index, siblings)).wait()
-            return skinnyIMTTest.verify.staticCall(leaf, index, siblings)
+            await (await fatIMTTest.verify(leaf, index, siblings)).wait()
+            return fatIMTTest.verify.staticCall(leaf, index, siblings)
         }
 
         async function callVerifyMany(leaves: any, leafIndexes: any, siblings: any): Promise<boolean> {
-            await (await skinnyIMTTest.verifyMany(leaves, leafIndexes, siblings)).wait()
-            return skinnyIMTTest.verifyMany.staticCall(leaves, leafIndexes, siblings)
+            await (await fatIMTTest.verifyMany(leaves, leafIndexes, siblings)).wait()
+            return fatIMTTest.verifyMany.staticCall(leaves, leafIndexes, siblings)
         }
 
         describe("# insert", () => {
             if (hasSnarkFieldCheck) {
                 it("Should not insert a leaf if its value is >= SNARK_SCALAR_FIELD", async () => {
-                    const transaction = skinnyIMTTest.insert(SNARK_SCALAR_FIELD)
+                    const transaction = fatIMTTest.insert(SNARK_SCALAR_FIELD)
 
-                    await expect(transaction).to.be.revertedWithCustomError(
-                        skinnyIMT,
-                        "LeafGreaterThanSnarkScalarField"
-                    )
+                    await expect(transaction).to.be.revertedWithCustomError(fatIMT, "LeafGreaterThanSnarkScalarField")
                 })
             }
 
             it("Should insert a leaf", async () => {
                 jsLeanIMT.insert(BigInt(1))
 
-                await skinnyIMTTest.insert(1)
+                await fatIMTTest.insert(1)
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
 
                 expect(root).to.equal(jsLeanIMT.root)
             })
@@ -136,9 +133,9 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 for (let i = 0; i < 10; i += 1) {
                     jsLeanIMT.insert(BigInt(i + 1))
 
-                    await skinnyIMTTest.insert(i + 1)
+                    await fatIMTTest.insert(i + 1)
 
-                    const root = await skinnyIMTTest.root()
+                    const root = await fatIMTTest.root()
 
                     expect(root).to.equal(jsLeanIMT.root)
                 }
@@ -148,9 +145,9 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 for (let i = 0; i < 128; i += 1) {
                     jsLeanIMT.insert(BigInt(i + 1))
 
-                    await skinnyIMTTest.insert(i + 1)
+                    await fatIMTTest.insert(i + 1)
 
-                    const root = await skinnyIMTTest.root()
+                    const root = await fatIMTTest.root()
 
                     expect(root).to.equal(jsLeanIMT.root)
                 }
@@ -160,21 +157,18 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
         describe("# insertMany", () => {
             if (hasSnarkFieldCheck) {
                 it("Should not insert a leaf if its value is >= SNARK_SCALAR_FIELD", async () => {
-                    const transaction = skinnyIMTTest.insertMany([SNARK_SCALAR_FIELD])
+                    const transaction = fatIMTTest.insertMany([SNARK_SCALAR_FIELD])
 
-                    await expect(transaction).to.be.revertedWithCustomError(
-                        skinnyIMT,
-                        "LeafGreaterThanSnarkScalarField"
-                    )
+                    await expect(transaction).to.be.revertedWithCustomError(fatIMT, "LeafGreaterThanSnarkScalarField")
                 })
             }
 
             it("Should insert a leaf", async () => {
                 jsLeanIMT.insert(BigInt(1))
 
-                await skinnyIMTTest.insertMany([1])
+                await fatIMTTest.insertMany([1])
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
 
                 expect(root).to.equal(jsLeanIMT.root)
             })
@@ -186,9 +180,9 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 }
 
                 jsLeanIMT.insertMany(elems)
-                await skinnyIMTTest.insertMany(elems)
+                await fatIMTTest.insertMany(elems)
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
             })
 
@@ -199,9 +193,9 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                     const elems = new Array(howMany).fill(0).map((v, i) => BigInt(index * howMany + i + 1))
 
                     jsLeanIMT.insertMany(elems)
-                    await skinnyIMTTest.insertMany(elems)
+                    await fatIMTTest.insertMany(elems)
 
-                    const root = await skinnyIMTTest.root()
+                    const root = await fatIMTTest.root()
                     expect(root).to.equal(jsLeanIMT.root)
                 }
             })
@@ -209,7 +203,7 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
             it("Should insert many leaves when the tree is not empty", async () => {
                 jsLeanIMT.insert(BigInt(1))
 
-                await skinnyIMTTest.insert(BigInt(1))
+                await fatIMTTest.insert(BigInt(1))
 
                 const elems: bigint[] = []
                 for (let i = 1; i < 10; i += 1) {
@@ -217,9 +211,9 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 }
 
                 jsLeanIMT.insertMany(elems)
-                await skinnyIMTTest.insertMany(elems)
+                await fatIMTTest.insertMany(elems)
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
             })
         })
@@ -227,21 +221,18 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
         describe("# insertManyRepeated", () => {
             if (hasSnarkFieldCheck) {
                 it("Should reject a value >= SNARK_SCALAR_FIELD", async () => {
-                    const transaction = skinnyIMTTest.insertManyRepeated(SNARK_SCALAR_FIELD, 3)
+                    const transaction = fatIMTTest.insertManyRepeated(SNARK_SCALAR_FIELD, 3)
 
-                    await expect(transaction).to.be.revertedWithCustomError(
-                        skinnyIMT,
-                        "LeafGreaterThanSnarkScalarField"
-                    )
+                    await expect(transaction).to.be.revertedWithCustomError(fatIMT, "LeafGreaterThanSnarkScalarField")
                 })
             }
 
             it("Should be a no-op when amount is 0", async () => {
-                const before = await skinnyIMTTest.root()
-                await skinnyIMTTest.insertManyRepeated(42, 0)
+                const before = await fatIMTTest.root()
+                await fatIMTTest.insertManyRepeated(42, 0)
 
-                expect(await skinnyIMTTest.root()).to.equal(before)
-                expect(await skinnyIMTTest.size()).to.equal(0)
+                expect(await fatIMTTest.root()).to.equal(before)
+                expect(await fatIMTTest.size()).to.equal(0)
             })
 
             it("Should insert N copies of a non-zero value into an empty tree", async () => {
@@ -249,38 +240,38 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 const amountLeafs = 7
                 for (let i = 0; i < amountLeafs; i++) jsLeanIMT.insert(value)
 
-                await skinnyIMTTest.insertManyRepeated(value, amountLeafs)
+                await fatIMTTest.insertManyRepeated(value, amountLeafs)
 
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
-                expect(await skinnyIMTTest.size()).to.equal(amountLeafs)
-                expect(await skinnyIMTTest.depth()).to.equal(jsLeanIMT.depth)
+                expect(await fatIMTTest.root()).to.equal(jsLeanIMT.root)
+                expect(await fatIMTTest.size()).to.equal(amountLeafs)
+                expect(await fatIMTTest.depth()).to.equal(jsLeanIMT.depth)
             })
 
             it("Should append N copies of a value after pre-existing leaves", async () => {
                 const v = 99n
                 const n = 5
                 jsLeanIMT.insertMany([1n, 2n, 3n])
-                await skinnyIMTTest.insertMany([1, 2, 3])
+                await fatIMTTest.insertMany([1, 2, 3])
 
                 for (let i = 0; i < n; i++) jsLeanIMT.insert(v)
-                await skinnyIMTTest.insertManyRepeated(v, n)
+                await fatIMTTest.insertManyRepeated(v, n)
 
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
-                expect(await skinnyIMTTest.size()).to.equal(3 + n)
+                expect(await fatIMTTest.root()).to.equal(jsLeanIMT.root)
+                expect(await fatIMTTest.size()).to.equal(3 + n)
             })
 
             it("Should allow alternating values across calls", async () => {
                 jsLeanIMT.insertMany([3n, 3n, 3n])
-                await skinnyIMTTest.insertManyRepeated(3, 3)
+                await fatIMTTest.insertManyRepeated(3, 3)
 
                 jsLeanIMT.insertMany([5n, 5n])
-                await skinnyIMTTest.insertManyRepeated(5, 2)
+                await fatIMTTest.insertManyRepeated(5, 2)
 
                 jsLeanIMT.insertMany([3n, 3n, 3n, 3n])
-                await skinnyIMTTest.insertManyRepeated(3, 4)
+                await fatIMTTest.insertManyRepeated(3, 4)
 
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
-                expect(await skinnyIMTTest.size()).to.equal(9)
+                expect(await fatIMTTest.root()).to.equal(jsLeanIMT.root)
+                expect(await fatIMTTest.size()).to.equal(9)
             })
 
             it("Should match the root from individual inserts of the same value", async () => {
@@ -288,9 +279,9 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 const n = 13
                 for (let i = 0; i < n; i++) jsLeanIMT.insert(v)
 
-                await skinnyIMTTest.insertManyRepeated(v, n)
+                await fatIMTTest.insertManyRepeated(v, n)
 
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
+                expect(await fatIMTTest.root()).to.equal(jsLeanIMT.root)
             })
 
             // The leftBoundary lift in _insertManyRepeated is guarded by
@@ -326,11 +317,11 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                         if (pre > 0) {
                             const preLeaves = new Array(pre).fill(0).map((_, i) => BigInt(i + 1))
                             jsLeanIMT.insertMany(preLeaves)
-                            await skinnyIMTTest.insertMany(preLeaves)
+                            await fatIMTTest.insertMany(preLeaves)
                         }
 
                         for (let i = 0; i < n; i++) jsLeanIMT.insert(v)
-                        await skinnyIMTTest.insertManyRepeated(v, n)
+                        await fatIMTTest.insertManyRepeated(v, n)
 
                         // Sanity: the geometry really is what the case row claims.
                         // firstIndex = pre, lastIndex = pre + n - 1.
@@ -340,10 +331,10 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                         let convergence = 0
                         while (firstIndex >> convergence !== lastIndex >> convergence) convergence++
                         expect(convergence, "convergence level matches the case row").to.equal(L)
-                        expect(await skinnyIMTTest.depth(), "newTreeDepth matches the case row").to.equal(depth)
+                        expect(await fatIMTTest.depth(), "newTreeDepth matches the case row").to.equal(depth)
 
-                        expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
-                        expect(await skinnyIMTTest.size()).to.equal(pre + n)
+                        expect(await fatIMTTest.root()).to.equal(jsLeanIMT.root)
+                        expect(await fatIMTTest.size()).to.equal(pre + n)
                     })
                 }
 
@@ -355,22 +346,22 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                     const pre = 64
                     const preLeaves = new Array(pre).fill(0).map((_, i) => BigInt(i + 1))
                     jsLeanIMT.insertMany(preLeaves)
-                    await skinnyIMTTest.insertMany(preLeaves)
+                    await fatIMTTest.insertMany(preLeaves)
 
                     jsLeanIMT.insert(v)
                     jsLeanIMT.insert(v)
-                    await skinnyIMTTest.insertManyRepeated(v, 2)
+                    await fatIMTTest.insertManyRepeated(v, 2)
 
-                    expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
-                    expect(await skinnyIMTTest.depth()).to.equal(7)
+                    expect(await fatIMTTest.root()).to.equal(jsLeanIMT.root)
+                    expect(await fatIMTTest.depth()).to.equal(7)
                 })
             })
         })
 
         describe("# precomputeRepeatedCache", () => {
             it("Should allow inserting a fuck ton of zeros in one tx. With pre-computed zeros", async () => {
-                await skinnyIMTTest.precomputeRepeatedCache(0, 255)
-                await skinnyIMTTest.insertManyRepeated(0, 2n ** 255n)
+                await fatIMTTest.precomputeRepeatedCache(0, 255)
+                await fatIMTTest.insertManyRepeated(0, 2n ** 255n)
             })
 
             it("Should burn worst-case gas for insertManyRepeated in one call (every shortcut defeated)", async () => {
@@ -409,30 +400,27 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 //   * D sideNode SSTOREs
                 const D = 255n
 
-                await skinnyIMTTest.precomputeRepeatedCache(0, D)
-                await skinnyIMTTest.insert(7)
-                await skinnyIMTTest.insertManyRepeated(0, 2n ** D - 2n)
+                await fatIMTTest.precomputeRepeatedCache(0, D)
+                await fatIMTTest.insert(7)
+                await fatIMTTest.insertManyRepeated(0, 2n ** D - 2n)
 
-                expect(await skinnyIMTTest.size()).to.equal(2n ** D - 1n)
-                expect(await skinnyIMTTest.depth()).to.equal(D)
+                expect(await fatIMTTest.size()).to.equal(2n ** D - 1n)
+                expect(await fatIMTTest.depth()).to.equal(D)
             })
 
             if (hasSnarkFieldCheck) {
                 it("Should reject a value >= SNARK_SCALAR_FIELD", async () => {
-                    const transaction = skinnyIMTTest.precomputeRepeatedCache(SNARK_SCALAR_FIELD, 4)
+                    const transaction = fatIMTTest.precomputeRepeatedCache(SNARK_SCALAR_FIELD, 4)
 
-                    await expect(transaction).to.be.revertedWithCustomError(
-                        skinnyIMT,
-                        "LeafGreaterThanSnarkScalarField"
-                    )
+                    await expect(transaction).to.be.revertedWithCustomError(fatIMT, "LeafGreaterThanSnarkScalarField")
                 })
             }
 
             it("Should be a no-op when upToLevel is 0", async () => {
-                await skinnyIMTTest.precomputeRepeatedCache(7, 0)
+                await fatIMTTest.precomputeRepeatedCache(7, 0)
                 // No state side-effects to observe directly; just verify it doesn't revert
                 // and the tree is still empty.
-                expect(await skinnyIMTTest.size()).to.equal(0)
+                expect(await fatIMTTest.size()).to.equal(0)
             })
 
             it("Should not change the root of a subsequent insertManyRepeated", async () => {
@@ -441,9 +429,9 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 const v = 13n
                 const n = 12
 
-                await skinnyIMTTest.precomputeRepeatedCache(v, 10)
-                await skinnyIMTTest.insertManyRepeated(v, n)
-                const warmRoot = await skinnyIMTTest.root()
+                await fatIMTTest.precomputeRepeatedCache(v, 10)
+                await fatIMTTest.insertManyRepeated(v, n)
+                const warmRoot = await fatIMTTest.root()
 
                 const { contract: cold } = await run(deployTaskName, {
                     library: libraryName,
@@ -481,48 +469,45 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
 
         describe("# update", () => {
             it("Should not update a leaf if the leaf does not exist", async () => {
-                const transaction = skinnyIMTTest.update(2, 1, 0, [1, 2, 3, 4])
+                const transaction = fatIMTTest.update(2, 1, 0, [1, 2, 3, 4])
 
-                await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "WrongSiblingNodes")
+                await expect(transaction).to.be.revertedWithCustomError(fatIMT, "WrongSiblingNodes")
             })
 
             if (hasSnarkFieldCheck) {
                 it("Should not update a leaf if its value is >= SNARK_SCALAR_FIELD", async () => {
-                    const transaction = skinnyIMTTest.update(2, SNARK_SCALAR_FIELD, 0, [1, 2, 3, 4])
+                    const transaction = fatIMTTest.update(2, SNARK_SCALAR_FIELD, 0, [1, 2, 3, 4])
 
-                    await expect(transaction).to.be.revertedWithCustomError(
-                        skinnyIMT,
-                        "LeafGreaterThanSnarkScalarField"
-                    )
+                    await expect(transaction).to.be.revertedWithCustomError(fatIMT, "LeafGreaterThanSnarkScalarField")
                 })
             }
 
             it("Should update a leaf if that's the only leaf in the tree", async () => {
-                await skinnyIMTTest.insert(1)
+                await fatIMTTest.insert(1)
                 jsLeanIMT.insert(BigInt(1))
 
                 const { siblings } = jsLeanIMT.generateProof(0)
 
-                await skinnyIMTTest.update(1, 2, 0, siblings)
+                await fatIMTTest.update(1, 2, 0, siblings)
                 jsLeanIMT.update(0, BigInt(2))
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
 
                 expect(root).to.equal(jsLeanIMT.root)
             })
 
             it("Should update a leaf if there's more than 1 leaf in the tree", async () => {
-                await skinnyIMTTest.insert(1)
-                await skinnyIMTTest.insert(2)
+                await fatIMTTest.insert(1)
+                await fatIMTTest.insert(2)
 
                 jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
                 jsLeanIMT.update(0, BigInt(3))
 
                 const { siblings } = jsLeanIMT.generateProof(0)
 
-                await skinnyIMTTest.update(1, 3, 0, siblings)
+                await fatIMTTest.update(1, 3, 0, siblings)
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
 
                 expect(root).to.equal(jsLeanIMT.root)
             })
@@ -538,25 +523,25 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                     const elems = new Array(howMany).fill(0).map((v, i) => BigInt(index * howMany + i + 1))
 
                     jsLeanIMT.insertMany(elems)
-                    await skinnyIMTTest.insertMany(elems)
+                    await fatIMTTest.insertMany(elems)
 
-                    const root = await skinnyIMTTest.root()
+                    const root = await fatIMTTest.root()
                     expect(root).to.equal(jsLeanIMT.root)
                 }
                 const { siblings } = jsLeanIMT.generateProof(0)
 
-                await skinnyIMTTest.update(oldLeaf, newLeaf, 0, siblings)
+                await fatIMTTest.update(oldLeaf, newLeaf, 0, siblings)
                 jsLeanIMT.update(jsLeanIMT.indexOf(oldLeaf), newLeaf)
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
 
                 expect(root).to.equal(jsLeanIMT.root)
             })
 
             if (hasSnarkFieldCheck) {
                 it("Should not update a leaf if its index is even and the value of at least one sibling node is >= SNARK_SCALAR_FIELD", async () => {
-                    await skinnyIMTTest.insert(1)
-                    await skinnyIMTTest.insert(2)
+                    await fatIMTTest.insert(1)
+                    await fatIMTTest.insert(2)
 
                     jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
                     jsLeanIMT.update(0, BigInt(3))
@@ -565,17 +550,14 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
 
                     siblings[0] = SNARK_SCALAR_FIELD
 
-                    const transaction = skinnyIMTTest.update(1, 3, 0, siblings)
+                    const transaction = fatIMTTest.update(1, 3, 0, siblings)
 
-                    await expect(transaction).to.be.revertedWithCustomError(
-                        skinnyIMT,
-                        "LeafGreaterThanSnarkScalarField"
-                    )
+                    await expect(transaction).to.be.revertedWithCustomError(fatIMT, "LeafGreaterThanSnarkScalarField")
                 })
 
                 it("Should not update a leaf if its index is odd and the value of at least one sibling node is >= SNARK_SCALAR_FIELD", async () => {
-                    await skinnyIMTTest.insert(1)
-                    await skinnyIMTTest.insert(2)
+                    await fatIMTTest.insert(1)
+                    await fatIMTTest.insert(2)
 
                     jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
                     jsLeanIMT.update(1, BigInt(3))
@@ -584,18 +566,15 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
 
                     siblings[0] = SNARK_SCALAR_FIELD
 
-                    const transaction = skinnyIMTTest.update(2, 3, 1, siblings)
+                    const transaction = fatIMTTest.update(2, 3, 1, siblings)
 
-                    await expect(transaction).to.be.revertedWithCustomError(
-                        skinnyIMT,
-                        "LeafGreaterThanSnarkScalarField"
-                    )
+                    await expect(transaction).to.be.revertedWithCustomError(fatIMT, "LeafGreaterThanSnarkScalarField")
                 })
             }
 
             it("Should not update a leaf if the siblings are wrong", async () => {
-                await skinnyIMTTest.insert(1)
-                await skinnyIMTTest.insert(2)
+                await fatIMTTest.insert(1)
+                await fatIMTTest.insert(2)
 
                 jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
                 jsLeanIMT.update(0, BigInt(3))
@@ -604,16 +583,16 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
 
                 siblings[0] = BigInt(3)
 
-                const transaction = skinnyIMTTest.update(1, 3, 0, siblings)
+                const transaction = fatIMTTest.update(1, 3, 0, siblings)
 
-                await expect(transaction).to.be.revertedWithCustomError(skinnyIMT, "WrongSiblingNodes")
+                await expect(transaction).to.be.revertedWithCustomError(fatIMT, "WrongSiblingNodes")
             })
 
             it("Should update 6 leaves", async () => {
                 for (let i = 0; i < 6; i += 1) {
                     jsLeanIMT.insert(BigInt(i + 1))
 
-                    await skinnyIMTTest.insert(i + 1)
+                    await fatIMTTest.insert(i + 1)
                 }
 
                 for (let i = 0; i < 6; i += 1) {
@@ -621,9 +600,9 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
 
                     const { siblings } = jsLeanIMT.generateProof(i)
 
-                    await skinnyIMTTest.update(i + 1, i + 7, i, siblings)
+                    await fatIMTTest.update(i + 1, i + 7, i, siblings)
 
-                    const root = await skinnyIMTTest.root()
+                    const root = await fatIMTTest.root()
 
                     expect(root).to.equal(jsLeanIMT.root)
                 }
@@ -632,21 +611,21 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
             it("Should maintain correct tree state after multiple updates and inserts", async () => {
                 for (let i = 0; i < 5; i += 1) {
                     jsLeanIMT.insert(BigInt(i + 1))
-                    await skinnyIMTTest.insert(i + 1)
+                    await fatIMTTest.insert(i + 1)
                 }
 
                 for (let i = 0; i < 3; i += 1) {
                     jsLeanIMT.update(i, BigInt(i + 10))
                     const { siblings } = jsLeanIMT.generateProof(i)
-                    await skinnyIMTTest.update(i + 1, i + 10, i, siblings)
+                    await fatIMTTest.update(i + 1, i + 10, i, siblings)
                 }
 
                 for (let i = 5; i < 8; i += 1) {
                     jsLeanIMT.insert(BigInt(i + 1))
-                    await skinnyIMTTest.insert(i + 1)
+                    await fatIMTTest.insert(i + 1)
                 }
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
             })
 
@@ -665,38 +644,38 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 // surfaces when the next insert reads that slot and the root diverges.
                 for (let i = 0; i < 11; i += 1) {
                     jsLeanIMT.insert(BigInt(i + 1))
-                    await skinnyIMTTest.insert(i + 1)
+                    await fatIMTTest.insert(i + 1)
                 }
 
                 const { siblings } = jsLeanIMT.generateProof(0)
-                await skinnyIMTTest.update(1, 99, 0, siblings)
+                await fatIMTTest.update(1, 99, 0, siblings)
                 jsLeanIMT.update(0, 99n)
 
                 // Still correct here: the update reconstructs index 0's own path fine.
-                expect(await skinnyIMTTest.root(), "root immediately after update").to.equal(jsLeanIMT.root)
+                expect(await fatIMTTest.root(), "root immediately after update").to.equal(jsLeanIMT.root)
 
                 // The next insert hashes against sideNodes[1]; a clobbered slot diverges here.
                 jsLeanIMT.insert(12n)
-                await skinnyIMTTest.insert(12)
-                expect(await skinnyIMTTest.root(), "root after a later insert").to.equal(jsLeanIMT.root)
+                await fatIMTTest.insert(12)
+                expect(await fatIMTTest.root(), "root after a later insert").to.equal(jsLeanIMT.root)
             })
         })
 
         // @TODO again double check this weird concept of update(leaf=0) as being a "remove"
         describe("# update to 0", () => {
             it("Should update a leaf to be 0", async () => {
-                await skinnyIMTTest.insert(1)
-                await skinnyIMTTest.insert(2)
-                await skinnyIMTTest.insert(3)
+                await fatIMTTest.insert(1)
+                await fatIMTTest.insert(2)
+                await fatIMTTest.insert(3)
 
                 jsLeanIMT.insertMany([BigInt(1), BigInt(2), BigInt(3)])
                 jsLeanIMT.update(2, BigInt(0))
 
                 const { siblings } = jsLeanIMT.generateProof(2)
 
-                await skinnyIMTTest.update(3, 0, 2, siblings)
+                await fatIMTTest.update(3, 0, 2, siblings)
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
 
                 expect(root).to.equal(jsLeanIMT.root)
             })
@@ -705,7 +684,7 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 for (let i = 0; i < 10; i += 1) {
                     jsLeanIMT.insert(BigInt(i + 1))
 
-                    await skinnyIMTTest.insert(i + 1)
+                    await fatIMTTest.insert(i + 1)
                 }
 
                 for (let i = 0; i < 10; i += 1) {
@@ -713,9 +692,9 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
 
                     const { siblings } = jsLeanIMT.generateProof(i)
 
-                    await skinnyIMTTest.update(i + 1, 0, i, siblings)
+                    await fatIMTTest.update(i + 1, 0, i, siblings)
 
-                    const root = await skinnyIMTTest.root()
+                    const root = await fatIMTTest.root()
 
                     expect(root).to.equal(jsLeanIMT.root)
                 }
@@ -733,7 +712,7 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
             }
 
             it("Should return true because the node is in the tree", async () => {
-                await skinnyIMTTest.insert(1)
+                await fatIMTTest.insert(1)
                 jsLeanIMT.insert(1n)
 
                 expect(await verifyByRealIndex(1n)).to.equal(true)
@@ -741,7 +720,7 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
 
             it("Should return false because the node is not the tree", async () => {
                 // should insert something other wise, treeSize == 0 and _proofToRoot reverts with "TreeEmpty"
-                await skinnyIMTTest.insert(1)
+                await fatIMTTest.insert(1)
                 jsLeanIMT.insert(2n)
                 const proof = jsLeanIMT.generateProof(0)
                 const hasLeaf = await callVerify(2, 0, proof.siblings)
@@ -750,13 +729,13 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
             })
 
             it("Should return true if the leaf is 0", async () => {
-                await skinnyIMTTest.insertMany([1, 2])
+                await fatIMTTest.insertMany([1, 2])
                 jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
 
                 jsLeanIMT.update(1, BigInt(0))
 
                 const { siblings } = jsLeanIMT.generateProof(1)
-                await skinnyIMTTest.update(2, 0, 1, siblings)
+                await fatIMTTest.update(2, 0, 1, siblings)
 
                 // leaf 0 sits at real index 1
                 expect(await verifyByRealIndex(0n)).to.equal(true)
@@ -764,7 +743,7 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
 
             it("Should verify a dense interior leaf by its real index", async () => {
                 jsLeanIMT.insertMany([1n, 2n, 3n, 4n])
-                await skinnyIMTTest.insertMany([1, 2, 3, 4])
+                await fatIMTTest.insertMany([1, 2, 3, 4])
 
                 // leaf 3 -> real index 2; a sibling exists at every level (raw == compacted)
                 expect(await verifyByRealIndex(3n)).to.equal(true)
@@ -785,7 +764,7 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 // compacted    = 3  (11)   <- proof.index
                 // naive 5 >> 1 = 2  (10)   <- WRONG
                 jsLeanIMT.insertMany([1n, 2n, 3n, 4n, 5n, 6n])
-                await skinnyIMTTest.insertMany([1, 2, 3, 4, 5, 6])
+                await fatIMTTest.insertMany([1, 2, 3, 4, 5, 6])
 
                 expect(await verifyByRealIndex(6n)).to.equal(true)
             })
@@ -801,7 +780,7 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 // naive 11 >> 1 =  5  (101)  <- WRONG
                 const values = Array.from({ length: 12 }, (_, i) => i + 1)
                 jsLeanIMT.insertMany(values.map((v) => BigInt(v)))
-                await skinnyIMTTest.insertMany(values)
+                await fatIMTTest.insertMany(values)
 
                 expect(await verifyByRealIndex(12n)).to.equal(true)
             })
@@ -813,7 +792,7 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
             async function insertRange(count: number) {
                 const elems = new Array(count).fill(0).map((_, i) => BigInt(i + 1))
                 jsLeanIMT.insertMany(elems)
-                await skinnyIMTTest.insertMany(elems)
+                await fatIMTTest.insertMany(elems)
             }
 
             it("Should verify a single leaf (degenerate multiproof)", async () => {
@@ -877,7 +856,7 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 await insertRange(6)
                 jsLeanIMT.update(2, 0n)
                 const { siblings: updateSiblings } = jsLeanIMT.generateProof(2)
-                await skinnyIMTTest.update(3, 0, 2, updateSiblings)
+                await fatIMTTest.update(3, 0, 2, updateSiblings)
 
                 const { leaves, leafIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 2, 4])
                 // None is the last leaf, so all three sit at level 0; index 2 is now 0.
@@ -917,8 +896,8 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 // More indexes than leaves: without a length guard the surplus index is
                 // silently never folded, so a caller would think it was proven when it wasn't.
                 await expect(
-                    skinnyIMTTest.verifyMany(leaves, [...leafIndexes, 5], siblings)
-                ).to.be.revertedWithCustomError(skinnyIMT, "WrongMultiProof")
+                    fatIMTTest.verifyMany(leaves, [...leafIndexes, 5], siblings)
+                ).to.be.revertedWithCustomError(fatIMT, "WrongMultiProof")
             })
 
             it("Should revert when an extra sibling is supplied", async () => {
@@ -928,17 +907,14 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 // A leftover sibling is a node the proof never hashes against anything, so
                 // it is never checked to be part of the tree — reject rather than ignore it.
                 await expect(
-                    skinnyIMTTest.verifyMany(leaves, leafIndexes, [...siblings, 123n])
-                ).to.be.revertedWithCustomError(skinnyIMT, "WrongMultiProof")
+                    fatIMTTest.verifyMany(leaves, leafIndexes, [...siblings, 123n])
+                ).to.be.revertedWithCustomError(fatIMT, "WrongMultiProof")
             })
 
             it("Should revert when the batch is empty", async () => {
                 await insertRange(8)
 
-                await expect(skinnyIMTTest.verifyMany([], [], [])).to.be.revertedWithCustomError(
-                    skinnyIMT,
-                    "WrongMultiProof"
-                )
+                await expect(fatIMTTest.verifyMany([], [], [])).to.be.revertedWithCustomError(fatIMT, "WrongMultiProof")
             })
 
             if (hasSnarkFieldCheck) {
@@ -947,8 +923,8 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
 
                     const { leafIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
                     await expect(
-                        skinnyIMTTest.verifyMany([1n, SNARK_SCALAR_FIELD], leafIndexes, siblings)
-                    ).to.be.revertedWithCustomError(skinnyIMT, "LeafGreaterThanSnarkScalarField")
+                        fatIMTTest.verifyMany([1n, SNARK_SCALAR_FIELD], leafIndexes, siblings)
+                    ).to.be.revertedWithCustomError(fatIMT, "LeafGreaterThanSnarkScalarField")
                 })
             }
 
@@ -983,7 +959,7 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
             async function insertRange(count: number) {
                 const elems = new Array(count).fill(0).map((_, i) => BigInt(i + 1))
                 jsLeanIMT.insertMany(elems)
-                await skinnyIMTTest.insertMany(elems)
+                await fatIMTTest.insertMany(elems)
             }
 
             // Builds a shared multiproof for `rawIndices` against the CURRENT tree, applies
@@ -992,7 +968,7 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
             async function updateManyDiff(rawIndices: number[], makeVal: (idx: number) => bigint) {
                 const { leaves: oldLeaves, leafIndexes, siblings } = generateMultiProof(jsLeanIMT, rawIndices)
                 const newLeaves = leafIndexes.map((idx) => makeVal(idx))
-                await (await skinnyIMTTest.updateMany(oldLeaves, newLeaves, leafIndexes, siblings)).wait()
+                await (await fatIMTTest.updateMany(oldLeaves, newLeaves, leafIndexes, siblings)).wait()
                 leafIndexes.forEach((idx, i) => jsLeanIMT.update(idx, newLeaves[i]))
                 return { leafIndexes, siblings, oldLeaves, newLeaves }
             }
@@ -1000,20 +976,20 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
             it("Should batch-update several leaves in a balanced tree", async () => {
                 await insertRange(8)
                 await updateManyDiff([1, 4, 6], (idx) => BigInt(1000 + idx))
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
+                expect(await fatIMTTest.root()).to.equal(jsLeanIMT.root)
             })
 
             it("Should batch-update a single leaf (degenerate multiproof) like update()", async () => {
                 await insertRange(6)
                 await updateManyDiff([2], () => 4242n)
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
+                expect(await fatIMTTest.root()).to.equal(jsLeanIMT.root)
             })
 
             it("Should batch-update adjacent leaves that share a parent", async () => {
                 await insertRange(8)
                 // 2 and 3 pair directly, so no sibling is supplied between them.
                 await updateManyDiff([2, 3], (idx) => BigInt(7000 + idx))
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
+                expect(await fatIMTTest.root()).to.equal(jsLeanIMT.root)
             })
 
             it("Should batch-update every leaf with an empty sibling list", async () => {
@@ -1022,20 +998,20 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 const { siblings } = await updateManyDiff(all, (idx) => BigInt(5000 + idx))
                 // When all leaves are supplied, nothing is left to provide.
                 expect(siblings.length).to.equal(0)
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
+                expect(await fatIMTTest.root()).to.equal(jsLeanIMT.root)
             })
 
             it("Should batch-update including the dangling right-edge leaf in an odd tree", async () => {
                 // 3 leaves: leaf 2 dangles above level 0.
                 await insertRange(3)
                 await updateManyDiff([0, 2], (idx) => BigInt(300 + idx))
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
+                expect(await fatIMTTest.root()).to.equal(jsLeanIMT.root)
             })
 
             it("Should batch-update leaves to 0", async () => {
                 await insertRange(6)
                 await updateManyDiff([1, 4], () => 0n)
-                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
+                expect(await fatIMTTest.root()).to.equal(jsLeanIMT.root)
             })
 
             // Regression for the per-node isNewSideNode reset: in a size-5 tree the level-2 frontier
@@ -1045,13 +1021,13 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
             it("Should refresh a frontier clobbered by a later edge node (size 5, update {0,4}), then grow", async () => {
                 await insertRange(5)
                 await updateManyDiff([0, 4], (idx) => BigInt(90000 + idx))
-                expect(await skinnyIMTTest.root(), "post-update").to.equal(jsLeanIMT.root)
+                expect(await fatIMTTest.root(), "post-update").to.equal(jsLeanIMT.root)
 
                 for (let k = 0; k < 4; k++) {
                     const v = BigInt(600000 + k)
                     jsLeanIMT.insert(v)
-                    await skinnyIMTTest.insert(v)
-                    expect(await skinnyIMTTest.root(), `append k=${k}`).to.equal(jsLeanIMT.root)
+                    await fatIMTTest.insert(v)
+                    expect(await fatIMTTest.root(), `append k=${k}`).to.equal(jsLeanIMT.root)
                 }
             })
 
@@ -1098,15 +1074,15 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
 
             it("Should revert on an empty batch", async () => {
                 await insertRange(8)
-                await expect(skinnyIMTTest.updateMany([], [], [], [])).to.be.revertedWithCustomError(
-                    skinnyIMT,
+                await expect(fatIMTTest.updateMany([], [], [], [])).to.be.revertedWithCustomError(
+                    fatIMT,
                     "WrongMultiProof"
                 )
             })
 
             it("Should revert on an empty tree", async () => {
-                await expect(skinnyIMTTest.updateMany([1], [2], [0], [])).to.be.revertedWithCustomError(
-                    skinnyIMT,
+                await expect(fatIMTTest.updateMany([1], [2], [0], [])).to.be.revertedWithCustomError(
+                    fatIMT,
                     "TreeEmpty"
                 )
             })
@@ -1115,8 +1091,8 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 await insertRange(8)
                 const { leaves: oldLeaves, leafIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
                 await expect(
-                    skinnyIMTTest.updateMany(oldLeaves, [111n], leafIndexes, siblings)
-                ).to.be.revertedWithCustomError(skinnyIMT, "WrongMultiProof")
+                    fatIMTTest.updateMany(oldLeaves, [111n], leafIndexes, siblings)
+                ).to.be.revertedWithCustomError(fatIMT, "WrongMultiProof")
             })
 
             it("Should revert when a wrong oldLeaf breaks the old-root check", async () => {
@@ -1125,16 +1101,16 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 const tampered = [...oldLeaves]
                 tampered[0] = oldLeaves[0] + 1n
                 await expect(
-                    skinnyIMTTest.updateMany(tampered, [111n, 222n], leafIndexes, siblings)
-                ).to.be.revertedWithCustomError(skinnyIMT, "WrongMultiProof")
+                    fatIMTTest.updateMany(tampered, [111n, 222n], leafIndexes, siblings)
+                ).to.be.revertedWithCustomError(fatIMT, "WrongMultiProof")
             })
 
             it("Should revert when an extra sibling is supplied", async () => {
                 await insertRange(8)
                 const { leaves: oldLeaves, leafIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
                 await expect(
-                    skinnyIMTTest.updateMany(oldLeaves, [111n, 222n], leafIndexes, [...siblings, 123n])
-                ).to.be.revertedWithCustomError(skinnyIMT, "WrongMultiProof")
+                    fatIMTTest.updateMany(oldLeaves, [111n, 222n], leafIndexes, [...siblings, 123n])
+                ).to.be.revertedWithCustomError(fatIMT, "WrongMultiProof")
             })
 
             if (hasSnarkFieldCheck) {
@@ -1142,8 +1118,8 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                     await insertRange(8)
                     const { leaves: oldLeaves, leafIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
                     await expect(
-                        skinnyIMTTest.updateMany(oldLeaves, [111n, SNARK_SCALAR_FIELD], leafIndexes, siblings)
-                    ).to.be.revertedWithCustomError(skinnyIMT, "LeafGreaterThanSnarkScalarField")
+                        fatIMTTest.updateMany(oldLeaves, [111n, SNARK_SCALAR_FIELD], leafIndexes, siblings)
+                    ).to.be.revertedWithCustomError(fatIMT, "LeafGreaterThanSnarkScalarField")
                 })
             }
         })
@@ -1155,18 +1131,18 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
             it("Should insert a leaf with value 0", async () => {
                 jsLeanIMT.insert(BigInt(0))
 
-                await skinnyIMTTest.insert(0)
+                await fatIMTTest.insert(0)
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
             })
 
             it("Should insertMany with 0 as the only leaf", async () => {
                 jsLeanIMT.insert(BigInt(0))
 
-                await skinnyIMTTest.insertMany([0])
+                await fatIMTTest.insertMany([0])
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
             })
 
@@ -1177,9 +1153,9 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 jsLeanIMT.insert(BigInt(1))
                 jsLeanIMT.insert(BigInt(0))
 
-                await skinnyIMTTest.insertMany([1, 0])
+                await fatIMTTest.insertMany([1, 0])
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
             })
 
@@ -1187,13 +1163,13 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 // When forked from LeanIMT, naively removing the LeafCannotBeZero would break this
                 // _update had a `if (newLeaf != 0)` guard that skipped writing leaves[0],
                 // so has(0) always returned false even after a leaf was updated to zero.
-                await skinnyIMTTest.insert(1)
+                await fatIMTTest.insert(1)
                 jsLeanIMT.insert(BigInt(1))
 
                 jsLeanIMT.update(0, BigInt(0))
                 const { siblings } = jsLeanIMT.generateProof(0)
 
-                await skinnyIMTTest.update(1, 0, 0, siblings)
+                await fatIMTTest.update(1, 0, 0, siblings)
                 const proof = jsLeanIMT.generateProof(0)
                 expect(await callVerify(0, 0, proof.siblings)).to.equal(true)
             })
@@ -1202,19 +1178,19 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 // When forked from LeanIMT, naively removing the LeafCannotBeZero would break this
                 // update uses _has(0) which would return false. Even though 0 was inserted.
                 // this caused LeafDoesNotExist error, even though it is there!
-                await skinnyIMTTest.insert(1)
-                await skinnyIMTTest.insert(2)
+                await fatIMTTest.insert(1)
+                await fatIMTTest.insert(2)
                 jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
 
                 jsLeanIMT.update(0, BigInt(0))
                 const { siblings } = jsLeanIMT.generateProof(0)
-                await skinnyIMTTest.update(1, 0, 0, siblings)
+                await fatIMTTest.update(1, 0, 0, siblings)
 
                 jsLeanIMT.update(0, BigInt(3))
                 const { siblings: newSiblings } = jsLeanIMT.generateProof(0)
-                await skinnyIMTTest.update(0, 3, 0, newSiblings)
+                await fatIMTTest.update(0, 3, 0, newSiblings)
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
             })
         })
@@ -1226,10 +1202,10 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 jsLeanIMT.insert(BigInt(1))
                 jsLeanIMT.insert(BigInt(1))
 
-                await skinnyIMTTest.insert(1)
-                await skinnyIMTTest.insert(1)
+                await fatIMTTest.insert(1)
+                await fatIMTTest.insert(1)
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
             })
 
@@ -1237,9 +1213,9 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 jsLeanIMT.insert(BigInt(1))
                 jsLeanIMT.insert(BigInt(1))
 
-                await skinnyIMTTest.insertMany([1, 1])
+                await fatIMTTest.insertMany([1, 1])
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
             })
 
@@ -1249,10 +1225,10 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 jsLeanIMT.insert(BigInt(2))
                 jsLeanIMT.insert(BigInt(2))
 
-                await skinnyIMTTest.insertMany([1, 1])
-                await skinnyIMTTest.insertMany([2, 2])
+                await fatIMTTest.insertMany([1, 1])
+                await fatIMTTest.insertMany([2, 2])
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
             })
 
@@ -1261,13 +1237,13 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 jsLeanIMT.insert(BigInt(2))
                 jsLeanIMT.update(0, BigInt(2))
 
-                await skinnyIMTTest.insert(1)
-                await skinnyIMTTest.insert(2)
+                await fatIMTTest.insert(1)
+                await fatIMTTest.insert(2)
 
                 const { siblings } = jsLeanIMT.generateProof(0)
-                await skinnyIMTTest.update(1, 2, 0, siblings)
+                await fatIMTTest.update(1, 2, 0, siblings)
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
             })
 
@@ -1276,30 +1252,30 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 jsLeanIMT.insert(BigInt(1))
                 jsLeanIMT.update(1, BigInt(5))
 
-                await skinnyIMTTest.insert(1)
-                await skinnyIMTTest.insert(1)
+                await fatIMTTest.insert(1)
+                await fatIMTTest.insert(1)
 
                 const { siblings } = jsLeanIMT.generateProof(1)
-                await skinnyIMTTest.update(1, 5, 1, siblings)
+                await fatIMTTest.update(1, 5, 1, siblings)
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
             })
 
             it("Should still find the first occurrence after updating the last duplicate", async () => {
                 // When forked from LeanIMT, naively removing the LeafAlreadyExists check caused this to break,
-                // leaves were tracked as leave -> index in SkinnyIMTData.leaves.
+                // leaves were tracked as leave -> index in FatIMTData.leaves.
                 // a duplicate insert would overwrite the index of the previous insert of that value
                 // this causes update to use the wrong index
-                await skinnyIMTTest.insert(1)
-                await skinnyIMTTest.insert(1) // duplicate at index 1, leaves[1] overwritten to point here
+                await fatIMTTest.insert(1)
+                await fatIMTTest.insert(1) // duplicate at index 1, leaves[1] overwritten to point here
                 jsLeanIMT.insert(BigInt(1))
                 jsLeanIMT.insert(BigInt(1))
 
                 // update(1, 5) targets last occurrence (index 1) since leaves[1] points there
                 jsLeanIMT.update(1, BigInt(5))
                 const { siblings } = jsLeanIMT.generateProof(1)
-                await skinnyIMTTest.update(1, 5, 1, siblings)
+                await fatIMTTest.update(1, 5, 1, siblings)
 
                 // leaves[1] is now cleared — the first occurrence at index 0 (still value 1)
                 // is permanently orphaned, has(1) returns false even though 1 exists at index 0
@@ -1313,22 +1289,22 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                 // leave sideNodes[0] alone — but _update refreshes sideNodes by VALUE
                 // (`sideNodes[level] == oldRoot`), so it matches 7 == 7 and silently
                 // rewrites sideNodes[0] to point at the wrong (updated) node.
-                await skinnyIMTTest.insertMany([7, 8, 7])
+                await fatIMTTest.insertMany([7, 8, 7])
                 jsLeanIMT.insertMany([7n, 8n, 7n])
 
                 const { siblings } = jsLeanIMT.generateProof(0)
-                await skinnyIMTTest.update(7, 9, 0, siblings)
+                await fatIMTTest.update(7, 9, 0, siblings)
                 jsLeanIMT.update(0, 9n)
 
                 // The update itself reconstructs index 0's path correctly, so the root
                 // is right immediately after — the corruption is invisible here.
-                expect(await skinnyIMTTest.root(), "root immediately after update").to.equal(jsLeanIMT.root)
+                expect(await fatIMTTest.root(), "root immediately after update").to.equal(jsLeanIMT.root)
 
                 // But the next insert hashes against sideNodes[0], which should still be
                 // leaf 2 (= 7). If it was corrupted to 9, the roots diverge.
                 jsLeanIMT.insert(5n)
-                await skinnyIMTTest.insert(5)
-                expect(await skinnyIMTTest.root(), "root after a later insert").to.equal(jsLeanIMT.root)
+                await fatIMTTest.insert(5)
+                expect(await fatIMTTest.root(), "root after a later insert").to.equal(jsLeanIMT.root)
             })
         })
 
@@ -1336,9 +1312,9 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
             it("Should return the tree root", async () => {
                 jsLeanIMT.insert(BigInt(1))
 
-                await skinnyIMTTest.insert(1)
+                await fatIMTTest.insert(1)
 
-                const root = await skinnyIMTTest.root()
+                const root = await fatIMTTest.root()
 
                 expect(root).to.equal(jsLeanIMT.root)
             })

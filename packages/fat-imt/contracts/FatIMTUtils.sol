@@ -3,7 +3,7 @@ pragma solidity ^0.8.4;
 
 import {UpdatedLeaf} from "./interfaces/events.sol";
 import {SNARK_SCALAR_FIELD} from "./Constants.sol";
-import {SkinnyIMTData} from "./InternalSkinnyIMTCore.sol";
+import {FatIMTData} from "./InternalFatIMTCore.sol";
 
 error LeafGreaterThanSnarkScalarField();
 

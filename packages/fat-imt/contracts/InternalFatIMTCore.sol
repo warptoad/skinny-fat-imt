@@ -4,7 +4,7 @@ pragma solidity ^0.8.4;
 import {SNARK_SCALAR_FIELD} from "./Constants.sol";
 
 // TODO optimize duplicate inserts by adding hashed from 0 level nodes
-struct SkinnyIMTData {
+struct FatIMTData {
     // Tracks the current number of leaves in the tree.
     uint256 size;
     // Represents the current depth of the tree, which can increase as new leaves are inserted.
@@ -34,26 +34,26 @@ error AlreadyInitialized();
 error WrongMultiProof();
 error TreeEmpty();
 
-/// @title Skinny Incremental binary Merkle tree.
-/// @dev The SkinnyIMT is an optimized version of the BinaryIMT.
+/// @title Fat Incremental binary Merkle tree.
+/// @dev The FatIMT is an optimized version of the BinaryIMT.
 /// This implementation eliminates the use of zeroes, and make the tree depth dynamic.
 /// When a node doesn't have the right child, instead of using a zero hash as in the BinaryIMT,
 /// the node's value becomes that of its left child. Furthermore, rather than utilizing a static tree depth,
 /// it is updated based on the number of leaves in the tree. This approach
 /// results in the calculation of significantly fewer hashes, making the tree more efficient.
-library InternalSkinnyIMTCore {
+library InternalFatIMTCore {
     /// @dev Checks whether the tree has been initialized.
-    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+    /// @param self: A storage reference to the 'FatIMTData' struct.
     /// @return True if the tree has been initialized, false otherwise.
-    function _isInitialized(SkinnyIMTData storage self) internal view returns (bool) {
+    function _isInitialized(FatIMTData storage self) internal view returns (bool) {
         return self.treeId != 0;
     }
 
     /// @dev Initializes the tree by assigning it a non-zero `treeId` derived from its storage slot.
     /// Reverts if the tree has already been initialized.
-    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+    /// @param self: A storage reference to the 'FatIMTData' struct.
     /// @return The newly assigned tree id.
-    function _init(SkinnyIMTData storage self) internal returns (uint256) {
+    function _init(FatIMTData storage self) internal returns (uint256) {
         if (_isInitialized(self)) {
             revert AlreadyInitialized();
         }
@@ -69,11 +69,11 @@ library InternalSkinnyIMTCore {
     /// @dev Inserts a new leaf into the incremental merkle tree.
     /// @notice Contracts using this function with snark based hash functions,
     // need to check that the leaf is within the snark scalar field.
-    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+    /// @param self: A storage reference to the 'FatIMTData' struct.
     /// @param leaf: The value of the new leaf to be inserted into the tree.
     /// @return root, index
     function _insert(
-        SkinnyIMTData storage self,
+        FatIMTData storage self,
         uint256 leaf,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256) {
@@ -127,11 +127,11 @@ library InternalSkinnyIMTCore {
     /// @dev Inserts many leaves into the incremental merkle tree.
     /// @notice Contracts using this function with snark based hash functions,
     // need to check that the leafs are within the snark scalar field.
-    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+    /// @param self: A storage reference to the 'FatIMTData' struct.
     /// @param leaves: The values of the new leaves to be inserted into the tree.
     /// @return The root after the leaves have been inserted.
     function _insertMany(
-        SkinnyIMTData storage self,
+        FatIMTData storage self,
         uint256[] calldata leaves,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
@@ -261,11 +261,11 @@ library InternalSkinnyIMTCore {
     /// any chain that reaches `currentNode` at any level for any starting value
     /// shares the same entry. Factored out of the main loop to keep the
     /// per-iteration stack under Solidity's 16-slot limit.
-    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+    /// @param self: A storage reference to the 'FatIMTData' struct.
     /// @param value: The value to hash with itself.
     /// @return `hasher(currentNode, currentNode)`.
     function _hashWithCache(
-        SkinnyIMTData storage self,
+        FatIMTData storage self,
         uint256 value,
         function(uint256[2] memory) view returns (uint256) hasher
     ) private returns (uint256) {
@@ -297,14 +297,14 @@ library InternalSkinnyIMTCore {
     /// will use nodes from repeatedCenterNode when ever they can.
     ///  And when a insert results in an balanced tree and previous tree is empty, that is alway the case.
     ///  So it become O(1*newTreeDepth)
-    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+    /// @param self: A storage reference to the 'FatIMTData' struct.
     /// @param value: The leaf value to insert `amount` copies of.
     /// @param amount: The number of leaves to append.
     /// @return root after the leaves have been appended.
     /// @return firstIndex index of the first appended leaf (inclusive).
     /// @return lastIndex index of the last appended leaf (inclusive).
     function _insertManyRepeated(
-        SkinnyIMTData storage self,
+        FatIMTData storage self,
         uint256 value,
         uint256 amount,
         function(uint256[2] memory) view returns (uint256) hasher
@@ -500,11 +500,11 @@ library InternalSkinnyIMTCore {
     /// for a particular `value` (e.g. zero) — pay the SSTOREs once, then every
     /// subsequent bulk-insert of that value reads cheaply from storage.
     /// @notice Reverts if the tree has not been initialized.
-    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+    /// @param self: A storage reference to the 'FatIMTData' struct.
     /// @param value: The leaf value whose repeated-subtree chain to precompute.
     /// @param upToLevel: The highest level (inclusive) to populate the cache for.
     function _precomputeRepeatedCache(
-        SkinnyIMTData storage self,
+        FatIMTData storage self,
         uint256 value,
         uint256 upToLevel,
         function(uint256[2] memory) view returns (uint256) hasher
@@ -530,7 +530,7 @@ library InternalSkinnyIMTCore {
 
     /// @dev Updates the value of an existing leaf and recalculates hashes
     /// to maintain tree integrity.
-    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+    /// @param self: A storage reference to the 'FatIMTData' struct.
     /// @param oldLeaf: The value of the leaf that is to be updated.
     /// @param newLeaf: The new value that will replace the oldLeaf in the tree.
     /// @param leafIndex: The index of the leaf to be updated.
@@ -542,7 +542,7 @@ library InternalSkinnyIMTCore {
     /// @notice Contracts using this function with snark based hash functions,
     /// need to check that the old and newLeaf and proofSiblings are within the snark scalar field.
     function _update(
-        SkinnyIMTData storage self,
+        FatIMTData storage self,
         uint256 oldLeaf,
         uint256 newLeaf,
         uint256 leafIndex,
@@ -864,7 +864,7 @@ library InternalSkinnyIMTCore {
 
     // would save 2 array in memory, more importantly stack pressure
     function _updateMany(
-        SkinnyIMTData storage self,
+        FatIMTData storage self,
         uint256[] calldata oldLeaves,
         uint256[] calldata newLeaves,
         MultiProof memory proof,
@@ -954,9 +954,9 @@ library InternalSkinnyIMTCore {
 
     /// @dev Retrieves the root of the tree from the 'sideNodes' mapping using the
     /// current tree depth.
-    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+    /// @param self: A storage reference to the 'FatIMTData' struct.
     /// @return The root hash of the tree.
-    function _root(SkinnyIMTData storage self) internal view returns (uint256) {
+    function _root(FatIMTData storage self) internal view returns (uint256) {
         return self.sideNodes[self.depth];
     }
 }
@@ -966,7 +966,7 @@ library InternalSkinnyIMTCore {
 // _hashMultiProofLevel uses 2 arrays for tracking nodes. currentLevel and nextLevel. You can prob just do it in 1
 // same for insertMany probably, but that is vivians code so i would rather keep it as similar as possible
 // and ofc we can just split into multiple contracts that export these internal functions. example move verify functions
-// outside of SkinnyIMTPoseidon2
+// outside of FatIMTPoseidon2
 
 // old unused code
 // this is not used because it only adds to contract size and gas of these functions.
@@ -974,7 +974,7 @@ library InternalSkinnyIMTCore {
 //------------ update and proofToRoot written with hashLevel pattern like updateMany and proofManyToRoot -------------
 // /// @dev Updates the value of an existing leaf and recalculates hashes
 // /// to maintain tree integrity.
-// /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+// /// @param self: A storage reference to the 'FatIMTData' struct.
 // /// @param oldLeaf: The value of the leaf that is to be updated.
 // /// @param newLeaf: The new value that will replace the oldLeaf in the tree.
 // /// @param leafIndex: The index of the leaf to be updated.
@@ -986,7 +986,7 @@ library InternalSkinnyIMTCore {
 // /// @notice Contracts using this function with snark based hash functions,
 // /// need to check that the old and newLeaf and proofSiblings are within the snark scalar field.
 // function _update(
-//     SkinnyIMTData storage self,
+//     FatIMTData storage self,
 //     uint256 oldLeaf,
 //     uint256 newLeaf,
 //     uint256 leafIndex,

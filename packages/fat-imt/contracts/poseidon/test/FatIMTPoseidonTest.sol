@@ -2,8 +2,8 @@
 
 pragma solidity ^0.8.4;
 
-import {SkinnyIMTPoseidon2, SkinnyIMTData} from "../SkinnyIMTPoseidon2.sol";
-import {SkinnyIMTPoseidon2Verify} from "../SkinnyIMTPoseidon2Verify.sol";
+import {FatIMTPoseidon, FatIMTData} from "../FatIMTPoseidon.sol";
+import {FatIMTPoseidonVerify} from "../FatIMTPoseidonVerify.sol";
 
 // verify/verifyMany are wrapped as state-changing (event-emitting) txs rather than
 // plain `view` so they appear in the hardhat gas report. Tests read the boolean
@@ -11,27 +11,27 @@ import {SkinnyIMTPoseidon2Verify} from "../SkinnyIMTPoseidon2Verify.sol";
 event VerifyResult(bool result);
 event VerifyManyResult(bool result);
 
-contract SkinnyIMTPoseidon2Test {
-    SkinnyIMTData internal data;
+contract FatIMTPoseidonTest {
+    FatIMTData internal data;
 
     constructor() {
-        SkinnyIMTPoseidon2.init(data);
+        FatIMTPoseidon.init(data);
     }
 
     function insert(uint256 leaf) external {
-        SkinnyIMTPoseidon2.insert(data, leaf);
+        FatIMTPoseidon.insert(data, leaf);
     }
 
     function insertMany(uint256[] calldata leaves) external {
-        SkinnyIMTPoseidon2.insertMany(data, leaves);
+        FatIMTPoseidon.insertMany(data, leaves);
     }
 
     function insertManyRepeated(uint256 value, uint256 amount) external {
-        SkinnyIMTPoseidon2.insertManyRepeated(data, value, amount);
+        FatIMTPoseidon.insertManyRepeated(data, value, amount);
     }
 
     function precomputeRepeatedCache(uint256 value, uint256 upToLevel) external {
-        SkinnyIMTPoseidon2.precomputeRepeatedCache(data, value, upToLevel);
+        FatIMTPoseidon.precomputeRepeatedCache(data, value, upToLevel);
     }
 
     function size() external view returns (uint256) {
@@ -43,7 +43,7 @@ contract SkinnyIMTPoseidon2Test {
     }
 
     function update(uint256 oldLeaf, uint256 newLeaf, uint256 index, uint256[] calldata siblingNodes) external {
-        SkinnyIMTPoseidon2.update(data, oldLeaf, newLeaf, index, siblingNodes);
+        FatIMTPoseidon.update(data, oldLeaf, newLeaf, index, siblingNodes);
     }
 
     function updateMany(
@@ -52,11 +52,11 @@ contract SkinnyIMTPoseidon2Test {
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
     ) external {
-        SkinnyIMTPoseidon2.updateMany(data, oldLeaves, newLeaves, leafIndexes, proofSiblings);
+        FatIMTPoseidon.updateMany(data, oldLeaves, newLeaves, leafIndexes, proofSiblings);
     }
 
     function verify(uint256 leaf, uint256 index, uint256[] calldata siblingsNodes) external returns (bool) {
-        bool result = SkinnyIMTPoseidon2Verify.verify(data, leaf, index, siblingsNodes);
+        bool result = FatIMTPoseidonVerify.verify(data, leaf, index, siblingsNodes);
         emit VerifyResult(result);
         return result;
     }
@@ -66,12 +66,12 @@ contract SkinnyIMTPoseidon2Test {
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
     ) external returns (bool) {
-        bool result = SkinnyIMTPoseidon2Verify.verifyMany(data, leaves, leafIndexes, proofSiblings);
+        bool result = FatIMTPoseidonVerify.verifyMany(data, leaves, leafIndexes, proofSiblings);
         emit VerifyManyResult(result);
         return result;
     }
 
     function root() public view returns (uint256) {
-        return SkinnyIMTPoseidon2.root(data);
+        return FatIMTPoseidon.root(data);
     }
 }

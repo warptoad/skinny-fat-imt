@@ -3,7 +3,7 @@ import poseidonSolidity from "poseidon-solidity"
 import { proxy } from "poseidon-solidity"
 import { ethers } from "ethers"
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers"
-import { SkinnyIMTPoseidon2Test__factory, SkinnyIMTPoseidon__factory } from "../typechain-types"
+import { FatIMTPoseidon2Test__factory, FatIMTPoseidon__factory } from "../typechain-types"
 
 // based of: https://github.com/chancehudson/poseidon-solidity?tab=readme-ov-file#deploy
 export async function deployPoseidon(
@@ -55,7 +55,7 @@ task("deploy:imt-poseidon-test", "Deploy an IMT contract for testing a library")
             libraries: {
                 [`PoseidonT${arity + 1}`]: poseidonAddress
             }
-        })) as SkinnyIMTPoseidon__factory
+        })) as FatIMTPoseidon__factory
 
         const library = await LibraryFactory.deploy()
         const libraryAddress = await library.getAddress()
@@ -66,7 +66,7 @@ task("deploy:imt-poseidon-test", "Deploy an IMT contract for testing a library")
 
         // Stateless proof verification was split into its own library to keep the main library
         // under the contract size limit; the test contract links both. It hashes via PoseidonT3.
-        const VerifyFactory = await ethers.getContractFactory("SkinnyIMTPoseidonVerify", {
+        const VerifyFactory = await ethers.getContractFactory("FatIMTPoseidonVerify", {
             libraries: {
                 [`PoseidonT${arity + 1}`]: poseidonAddress
             }
@@ -75,13 +75,13 @@ task("deploy:imt-poseidon-test", "Deploy an IMT contract for testing a library")
         const verifyLibraryAddress = await verifyLibrary.getAddress()
 
         if (logs) {
-            console.info(`SkinnyIMTPoseidonVerify library has been deployed to: ${verifyLibraryAddress}`)
+            console.info(`FatIMTPoseidonVerify library has been deployed to: ${verifyLibraryAddress}`)
         }
 
         const ContractFactory = await ethers.getContractFactory(`${libraryName}Test`, {
             libraries: {
                 [libraryName]: libraryAddress,
-                SkinnyIMTPoseidonVerify: verifyLibraryAddress
+                FatIMTPoseidonVerify: verifyLibraryAddress
             }
         })
 
