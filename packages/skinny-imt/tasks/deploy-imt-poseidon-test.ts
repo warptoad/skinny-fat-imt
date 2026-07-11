@@ -64,9 +64,24 @@ task("deploy:imt-poseidon-test", "Deploy an IMT contract for testing a library")
             console.info(`${libraryName} library has been deployed to: ${libraryAddress}`)
         }
 
+        // Stateless proof verification was split into its own library to keep the main library
+        // under the contract size limit; the test contract links both. It hashes via PoseidonT3.
+        const VerifyFactory = await ethers.getContractFactory("SkinnyIMTPoseidonVerify", {
+            libraries: {
+                [`PoseidonT${arity + 1}`]: poseidonAddress
+            }
+        })
+        const verifyLibrary = await VerifyFactory.deploy()
+        const verifyLibraryAddress = await verifyLibrary.getAddress()
+
+        if (logs) {
+            console.info(`SkinnyIMTPoseidonVerify library has been deployed to: ${verifyLibraryAddress}`)
+        }
+
         const ContractFactory = await ethers.getContractFactory(`${libraryName}Test`, {
             libraries: {
-                [libraryName]: libraryAddress
+                [libraryName]: libraryAddress,
+                SkinnyIMTPoseidonVerify: verifyLibraryAddress
             }
         })
 

@@ -3,6 +3,13 @@
 pragma solidity ^0.8.4;
 
 import {SkinnyIMTPoseidon, SkinnyIMTData} from "../SkinnyIMTPoseidon.sol";
+import {SkinnyIMTPoseidonVerify} from "../SkinnyIMTPoseidonVerify.sol";
+
+// verify/verifyMany are wrapped as state-changing (event-emitting) txs rather than
+// plain `view` so they appear in the hardhat gas report. Tests read the boolean
+// result via `.staticCall` and send the real tx to record gas.
+event VerifyResult(bool result);
+event VerifyManyResult(bool result);
 
 contract SkinnyIMTPoseidonTest {
     SkinnyIMTData internal data;
@@ -17,10 +24,6 @@ contract SkinnyIMTPoseidonTest {
 
     function insertMany(uint256[] calldata leaves) external {
         SkinnyIMTPoseidon.insertMany(data, leaves);
-    }
-
-    function insertManyZeros(uint256 amount) external {
-        SkinnyIMTPoseidon.insertManyZeros(data, amount);
     }
 
     function insertManyRepeated(uint256 value, uint256 amount) external {
@@ -43,8 +46,29 @@ contract SkinnyIMTPoseidonTest {
         SkinnyIMTPoseidon.update(data, oldLeaf, newLeaf, index, siblingNodes);
     }
 
-    function verify(uint256 leaf, uint256 index, uint256[] calldata siblingsNodes) external view returns (bool) {
-        return SkinnyIMTPoseidon.verify(data, leaf, index, siblingsNodes);
+    function updateMany(
+        uint256[] calldata oldLeaves,
+        uint256[] calldata newLeaves,
+        uint256[] calldata leafIndexes,
+        uint256[] calldata proofSiblings
+    ) external {
+        SkinnyIMTPoseidon.updateMany(data, oldLeaves, newLeaves, leafIndexes, proofSiblings);
+    }
+
+    function verify(uint256 leaf, uint256 index, uint256[] calldata siblingsNodes) external returns (bool) {
+        bool result = SkinnyIMTPoseidonVerify.verify(data, leaf, index, siblingsNodes);
+        emit VerifyResult(result);
+        return result;
+    }
+
+    function verifyMany(
+        uint256[] calldata leaves,
+        uint256[] calldata leafIndexes,
+        uint256[] calldata proofSiblings
+    ) external returns (bool) {
+        bool result = SkinnyIMTPoseidonVerify.verifyMany(data, leaves, leafIndexes, proofSiblings);
+        emit VerifyManyResult(result);
+        return result;
     }
 
     function root() public view returns (uint256) {

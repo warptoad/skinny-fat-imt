@@ -15,16 +15,8 @@ struct SkinnyIMTData {
     //@TODO use since it can be retrieved extremely fast with debug_storageRangeAt
     //uint256[] public leaves;
     uint256 treeId;
-    // Memoizes `hasher(x, x)` for any `x`. Used to lift repeated-subtree roots
-    // up one level: with H being the tree's hash function, the depth-(L+1) root
-    // of an all-`v` subtree is `H(depth-L root, depth-L root)`. Since both
-    // inputs are the same value, the cache only needs a single uint256 key.
-    // Populated lazily by `_insertManyRepeated` and eagerly by
-    // `_precomputeRepeatedCache`. Entries are valid across all values and levels —
-    // any two chains that happen to coincide at some node share the same entry.
-    // Sentinel: a stored 0 means "not yet cached". Relies on cryptographic
-    // hashes never landing on 0 — a re-hash would be triggered if they did, which
-    // is a perf hiccup but not a correctness bug.
+    // caches the hash of a repeated value, so instead of doing hash(value,value)
+    // you can lookup repeatedHashCache[value]
     mapping(uint256 => uint256) repeatedHashCache;
 }
 

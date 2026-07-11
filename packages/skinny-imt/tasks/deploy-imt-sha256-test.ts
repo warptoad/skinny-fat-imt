@@ -24,9 +24,20 @@ task("deploy:imt-sha256-test", "Deploy an IMT contract for testing a library")
             console.info(`${libraryName} library has been deployed to: ${libraryAddress}`)
         }
 
+        // Stateless proof verification was split into its own library to keep the main library
+        // under the contract size limit; the test contract links both.
+        const VerifyFactory = await ethers.getContractFactory("SkinnyIMTSha256Verify", { libraries: {} })
+        const verifyLibrary = await VerifyFactory.deploy()
+        const verifyLibraryAddress = await verifyLibrary.getAddress()
+
+        if (logs) {
+            console.info(`SkinnyIMTSha256Verify library has been deployed to: ${verifyLibraryAddress}`)
+        }
+
         const ContractFactory = await ethers.getContractFactory(`${libraryName}Test`, {
             libraries: {
-                [libraryName]: libraryAddress
+                [libraryName]: libraryAddress,
+                SkinnyIMTSha256Verify: verifyLibraryAddress
             }
         })
 
