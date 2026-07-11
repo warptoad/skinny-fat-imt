@@ -3103,9 +3103,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@zk-kit/skinny-imt.sol@workspace:packages/skinny-imt/contracts":
+"@zk-kit/skinny-imt.sol@workspace:packages/fat-imt/contracts":
   version: 0.0.0-use.local
-  resolution: "@zk-kit/skinny-imt.sol@workspace:packages/skinny-imt/contracts"
+  resolution: "@zk-kit/skinny-imt.sol@workspace:packages/fat-imt/contracts"
   dependencies:
     poseidon-solidity: "npm:0.0.5"
   languageName: unknown
@@ -9803,9 +9803,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"skinny-imt.sol@workspace:packages/skinny-imt":
+"skinny-imt.sol@workspace:packages/fat-imt":
   version: 0.0.0-use.local
-  resolution: "skinny-imt.sol@workspace:packages/skinny-imt"
+  resolution: "skinny-imt.sol@workspace:packages/fat-imt"
   dependencies:
     "@nomicfoundation/hardhat-chai-matchers": "npm:^2.0.3"
     "@nomicfoundation/hardhat-ethers": "npm:^3.0.0"
