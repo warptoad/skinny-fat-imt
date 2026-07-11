@@ -360,19 +360,30 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
 
         describe("# precomputeRepeatedCache", () => {
             it("Should allow inserting a fuck ton of zeros in one tx. With pre-computed zeros", async () => {
+                // Now that every node of the inserted block is materialized in storage
+                // (needed for proof-less update), a repeated insert is O(amount) SSTOREs,
+                // so the old "2^255 in one tx" is no longer possible — it is bounded by
+                // block gas like any bulk insert. This still checks the point of the cache:
+                // precompute warms the repeated-hash chain so the big insert does zero real
+                // hashes, and the resulting fully-materialized tree matches the reference.
+                const amount = 500
+
+                // js-leanIMT's insertMany skips 0s (see file header), so loop plain inserts.
+                for (let i = 0; i < amount; i += 1) {
+                    jsLeanIMT.insert(0n)
+                }
+
                 await fatIMTTest.precomputeRepeatedCache(0, 255)
-                await fatIMTTest.insertManyRepeated(0, 2n ** 255n)
+                await fatIMTTest.insertManyRepeated(0, amount)
+
+                expect(await fatIMTTest.size()).to.equal(amount)
+                expect(await fatIMTTest.depth()).to.equal(jsLeanIMT.depth)
+                expect(await fatIMTTest.root()).to.equal(jsLeanIMT.root)
             })
 
-            it("Should burn worst-case gas for insertManyRepeated in one call (every shortcut defeated)", async () => {
-                // The pre-optimisation upper bound was "insertManyZeros(2^255) into empty
-                // tree with cache pre-warmed". Now that's a *best* case: every level hits
-                // the canonical-chain shortcuts (leftBoundary == repeatedCenter, and
-                // rightEdge == newSideNode == repeatedCenter), so each level is a cache
-                // SLOAD plus a sideNode SSTORE — zero real hashes.
-                //
-                // To reconstruct an upper bound, defeat all three shortcuts so every
-                // level pays two real hashes (one leftBoundary + one rightEdge):
+            it("Should run worst case amount of hashes for insertManyRepeated in one call (every shortcut defeated)", async () => {
+                // Worst case for the hashing: defeat all three repeated-subtree shortcuts so
+                // every level pays two real hashes (one leftBoundary + one rightEdge):
                 //
                 //   1. leftBoundary shortcut needs leftBoundary == repeatedCenter (and
                 //      oldSideNode == repeatedCenter on the right branch). Break it by
@@ -393,12 +404,9 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                 //
                 // Geometry: pre-insert one leaf of value 7, then insertManyZeros of
                 // (2^D - 2). That gives firstIndex=1 (odd), lastIndex=2^D-2 (even at
-                // level 0), sideNodes[0]=7 (≠ 0). Resulting per-call work (warm cache):
-                //   * D cache SLOADs (hits)
-                //   * D-1 real leftBoundary hashes
-                //   * D-1 real rightEdge hashes
-                //   * D sideNode SSTOREs
-                const D = 255n
+                // level 0), sideNodes[0]=7 (≠ 0). D is kept small enough that the now
+                // O(amount) storage writes fit in one block's gas.
+                const D = 9n
 
                 await fatIMTTest.precomputeRepeatedCache(0, D)
                 await fatIMTTest.insert(7)

@@ -15,6 +15,14 @@ const hardhatConfig: HardhatUserConfig = {
             }
         }
     },
+    networks: {
+        // The fat test wrappers inline every function and, now that all nodes are stored, exceed the
+        // 24576-byte EIP-170 limit. Allow oversized contracts on the in-process test network so the
+        // suite can deploy them; this does not affect the library's real-world gas/size.
+        hardhat: {
+            allowUnlimitedContractSize: true
+        }
+    },
     gasReporter: {
         currency: "USD",
         enabled: process.env.REPORT_GAS === "true",
