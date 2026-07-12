@@ -27,9 +27,18 @@ library InternalFatIMTStorage {
     ) internal view returns (uint256[] memory) {
         uint256[] memory leaves = new uint256[](endIndex - firstIndex);
         for (uint256 i = 0; i < leaves.length; i++) {
-            leaves[i] = self.leaves[firstIndex + 1];
+            leaves[i] = self.leaves[firstIndex + i];
         }
         return leaves;
+    }
+
+    function _getNodes(
+        FatIMTDataFullNode storage self,
+        uint256 firstIndex,
+        uint256 endIndex,
+        uint256 level
+    ) internal view returns (uint256[] memory) {
+        return InternalFatIMTEvent._getNodes(self.skinnyData, firstIndex, endIndex, level);
     }
 
     function _init(FatIMTDataFullNode storage self) internal returns (uint256) {

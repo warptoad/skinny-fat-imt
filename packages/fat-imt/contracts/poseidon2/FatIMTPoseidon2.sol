@@ -17,6 +17,23 @@ library FatIMTPoseidon2 {
         return InternalFatIMTEvent._init(self);
     }
 
+    function getNodes(
+        FatIMTData storage self,
+        uint256 firstIndex,
+        uint256 endIndex,
+        uint256 level
+    ) public view returns (uint256[] memory) {
+        return InternalFatIMTEvent._getNodes(self, firstIndex, endIndex, level);
+    }
+
+    function getLeaves(
+        FatIMTData storage self,
+        uint256 firstIndex,
+        uint256 endIndex
+    ) public view returns (uint256[] memory) {
+        return InternalFatIMTEvent._getNodes(self, firstIndex, endIndex, 0);
+    }
+
     function insert(FatIMTData storage self, uint256 leaf) public returns (uint256, uint256) {
         return InternalFatIMTEvent._insertBN254(self, leaf, hasher);
     }

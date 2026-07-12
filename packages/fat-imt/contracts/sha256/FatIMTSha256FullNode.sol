@@ -17,6 +17,23 @@ library FatIMTSha256FullNode {
         return InternalFatIMTStorage._init(self);
     }
 
+    function getNodes(
+        FatIMTDataFullNode storage self,
+        uint256 firstIndex,
+        uint256 endIndex,
+        uint256 level
+    ) public view returns (uint256[] memory) {
+        return InternalFatIMTStorage._getNodes(self, firstIndex, endIndex, level);
+    }
+
+    function getLeaves(
+        FatIMTDataFullNode storage self,
+        uint256 firstIndex,
+        uint256 endIndex
+    ) public view returns (uint256[] memory) {
+        return InternalFatIMTStorage._getLeaves(self, firstIndex, endIndex);
+    }
+
     function insert(FatIMTDataFullNode storage self, uint256 leaf) public returns (uint256, uint256) {
         return InternalFatIMTStorage._insert(self, leaf, hasher);
     }

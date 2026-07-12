@@ -5,11 +5,41 @@ import {InternalFatIMTCore, FatIMTData, MultiProof, TreeEmpty} from "./InternalF
 import {NewTree, NewLeaf, RepeatedLeafs, UpdatedLeaf} from "./interfaces/events.sol";
 import {_emitUpdatedMany, _requireInField, _requireAllInField} from "./FatIMTUtils.sol";
 
+error EndIndexOutOfRange();
+error LevelOutOfRange();
+
 library InternalFatIMTEvent {
     function _init(FatIMTData storage self) internal returns (uint256) {
         uint256 treeId = InternalFatIMTCore._init(self);
         emit NewTree(treeId);
         return treeId;
+    }
+
+    /// helper function for clients to retrieve nodes in a batch
+    /// @notice set level 0 to get the leaves
+    /// @param self: A storage reference to the 'FatIMTData' struct.
+    /// @param firstIndex: first node index to get (inclusive)
+    /// @param endIndex: last node index to stop retrieving at (exclusive)
+    /// @param level: the tree level to read from (0 == leaves)
+    function _getNodes(
+        FatIMTData storage self,
+        uint256 firstIndex,
+        uint256 endIndex,
+        uint256 level
+    ) internal view returns (uint256[] memory) {
+        if (level > self.depth) {
+            revert LevelOutOfRange();
+        }
+        // number of nodes at this level = ceil(size / 2**level); the rightmost may be a dangling node
+        uint256 nodeCountAtLevel = (self.size + (1 << level) - 1) >> level;
+        if (endIndex > nodeCountAtLevel) {
+            revert EndIndexOutOfRange();
+        }
+        uint256[] memory nodes = new uint256[](endIndex - firstIndex);
+        for (uint256 i = 0; i < nodes.length; i++) {
+            nodes[i] = self.nodes[level][firstIndex + i];
+        }
+        return nodes;
     }
 
     function _insert(
