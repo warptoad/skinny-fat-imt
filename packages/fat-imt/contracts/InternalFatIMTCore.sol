@@ -10,12 +10,8 @@ struct FatIMTData {
     // Represents the current depth of the tree, which can increase as new leaves are inserted.
     uint256 depth;
     // Every node in the tree, keyed by [level][index]. Level 0 holds the leaves, and the
-    // root lives at nodes[depth][0]. Unlike the skinny sideNodes mapping (which only kept the
-    // left-frontier node per level), the fat tree stores every node so any node can be looked
-    // up directly, without needing merkle proofs to reconstruct a path.
+    // root lives at nodes[depth][0]. This allows leaf updates without merkle proofs
     mapping(uint256 => mapping(uint256 => uint256)) nodes;
-    //@TODO use since it can be retrieved extremely fast with debug_storageRangeAt
-    //uint256[] public leaves;
     uint256 treeId;
     // caches the hash of a repeated value, so instead of doing hash(value,value)
     // you can lookup repeatedHashCache[value]
@@ -38,7 +34,7 @@ error TreeEmpty();
 
 /// @title Fat Incremental binary Merkle tree.
 /// @dev The FatIMT is an optimized version of the BinaryIMT.
-/// This implementation eliminates the use of zeroes, and make the tree depth dynamic.
+/// This implementation eliminates the use of pre-inserted zeroes, and make the tree depth dynamic.
 /// When a node doesn't have the right child, instead of using a zero hash as in the BinaryIMT,
 /// the node's value becomes that of its left child. Furthermore, rather than utilizing a static tree depth,
 /// it is updated based on the number of leaves in the tree. This approach
@@ -46,13 +42,15 @@ error TreeEmpty();
 library InternalFatIMTCore {
     /// @dev Checks whether the tree has been initialized.
     /// @param self: A storage reference to the 'FatIMTData' struct.
-    /// @return True if the tree has been initialized, false otherwise.
+    /// @return True if initialized
     function _isInitialized(FatIMTData storage self) internal view returns (bool) {
         return self.treeId != 0;
     }
 
     /// @dev Initializes the tree by assigning it a non-zero `treeId` derived from its storage slot.
     /// Reverts if the tree has already been initialized.
+    /// @notice `self.treeId` stores `self.slot + 1`, to prevent upgradable contracts
+    /// who might change the slot, from losing the original treeId
     /// @param self: A storage reference to the 'FatIMTData' struct.
     /// @return The newly assigned tree id.
     function _init(FatIMTData storage self) internal returns (uint256) {
@@ -68,24 +66,18 @@ library InternalFatIMTCore {
         return id;
     }
 
-    /// @dev Reads a single node by its position. Factored into a helper so the double-mapping
-    /// lookup happens in its own stack frame, keeping hot loops under Solidity's 16-slot limit.
-    /// @param self: A storage reference to the 'FatIMTData' struct.
-    /// @param level: The tree level (0 == leaves).
-    /// @param index: The node index within that level.
+    /// @dev self.nodes getter (to stay under stack limit)
     function _getNode(FatIMTData storage self, uint256 level, uint256 index) internal view returns (uint256) {
         return self.nodes[level][index];
     }
 
-    /// @dev Writes a single node by its position. Factored into a helper for the same stack reason
-    /// as _getNode.
+    /// @dev self.nodes setter (to stay under stack limit)
     function _setNode(FatIMTData storage self, uint256 level, uint256 index, uint256 value) private {
         self.nodes[level][index] = value;
     }
 
-    /// @dev Writes a whole contiguous run of nodes (`levelNodes[i]` goes to index `startIndex + i`)
-    /// on one level. The loop lives in this helper's own frame so callers under the 16-slot stack
-    /// limit can persist a level without the loop counter adding to their pressure.
+    /// @dev self.nodes getter (to stay under stack limit)
+    /// writes a batch of nodes for one level
     function _setNodes(
         FatIMTData storage self,
         uint256 level,
@@ -100,26 +92,33 @@ library InternalFatIMTCore {
         }
     }
 
-    /// @dev Materializes every node of a repeated-insert block on one level at its real index.
-    /// The block spans positions `[leftPos, rightPos]`: the two ends are the boundary/edge nodes
-    /// (`leftVal`/`rightVal`, which may mix in existing-tree values), and every position strictly
-    /// between them is the same repeated-subtree root for this level (`centerVal`). When the block
-    /// has collapsed to a single node (`leftPos == rightPos`) both ends are that node. The loop
-    /// lives in its own frame so `_insertManyRepeated` stays under the 16-slot stack limit.
+    /// @dev used in _insertManyRepeated (to stay under stack limit)
+    /// writes all the nodes of one level from _insertManyRepeated:
+    /// the left and right boundary node (who might differ from the repeating hashes)
+    /// and the repeating nodes in between those (who always share the same value).
+    /// @notice once indexes match up, this function choose rightEdgeNode above: leftBoundaryNode and centerRepeatingNode
+    /// this means that, in that case leftBoundaryNode and centerRepeatingNode are allowed to be stale.
     function _setRepeatedRange(
         FatIMTData storage self,
         uint256 level,
         uint256 leftIndex,
         uint256 rightIndex,
-        uint256 leftVal,
-        uint256 centerVal,
-        uint256 rightVal
+        uint256 leftBoundaryNode,
+        uint256 centerRepeatingNode,
+        uint256 rightEdgeNode
     ) private {
         mapping(uint256 => uint256) storage levelNodes = self.nodes[level];
-        levelNodes[leftIndex] = leftVal;
-        levelNodes[rightIndex] = rightVal;
+
+        // rightEdge is authoritative at rightIndex, always write it
+        levelNodes[rightIndex] = rightEdgeNode;
+
+        // only write if they are at different indexes
+        if (leftIndex < rightIndex) {
+            levelNodes[leftIndex] = leftBoundaryNode;
+        }
+        // fill in the gap with centerRepeatingNode. If there is any, otherwise ignore centerRepeatingNode
         for (uint256 index = leftIndex + 1; index < rightIndex; ) {
-            levelNodes[index] = centerVal;
+            levelNodes[index] = centerRepeatingNode;
             unchecked {
                 ++index;
             }
@@ -127,11 +126,10 @@ library InternalFatIMTCore {
     }
 
     /// @dev Inserts a new leaf into the incremental merkle tree.
-    /// @notice Contracts using this function with snark based hash functions,
-    // need to check that the leaf is within the snark scalar field.
+    /// @notice Does not do field checks. For that use `InternalFatIMTEvent._insertBN254()`
     /// @param self: A storage reference to the 'FatIMTData' struct.
     /// @param leaf: The value of the new leaf to be inserted into the tree.
-    /// @return root, index
+    /// @return (root, index) root: the new root, index: index leaf landed at
     function _insert(
         FatIMTData storage self,
         uint256 leaf,
@@ -148,7 +146,7 @@ library InternalFatIMTCore {
         // A new insertion can increase a tree's depth by at most 1,
         // and only if the number of leaves supported by the current
         // depth is less than the number of leaves to be supported after insertion.
-        if (2 ** treeDepth < index + 1) {
+        if ((1 << treeDepth) < index + 1) {
             ++treeDepth;
         }
 
@@ -164,13 +162,22 @@ library InternalFatIMTCore {
 
         for (uint256 level = 0; level < treeDepth; ) {
             if (nodeIndex & 1 == 1) {
-                // right child: hash with the left sibling, which a previous insert
-                // already stored at the index right before this one on this level
+                // right child: hash with the left sibling
+                // Tree fills left to right, and we carry up any even indexes until they're uneven,
+                // so we only hash on the "node is right" case
+                // This feels weird, since it sounds like an leaf at even index at lets say 8 that:
+                //_hashMultiProofLevel needs to be hashed left in a balanced of size 16 tree
+                // so `hash(index_8, index_9)`
+                // That does happen, but at the next insert. Next insert does: `hash(index_8, index_9)`
+                // where index_8 is read from storage (`self.nodes[level][index_9 - 1]`)
                 node = hasher([self.nodes[level][nodeIndex - 1], node]);
             }
+            // else {
             // left child (even pos): node dangles and becomes its own parent, carried up unchanged
+            // until it hits a uneven pos, then it joins the tree by hashing with a subtree (`hash(subtree, node)`)
+            // }
 
-            // move up a level and store the (new or carried up) parent at its index
+            // shift index to next level, store every node
             nodeIndex >>= 1;
             self.nodes[level + 1][nodeIndex] = node;
 
@@ -223,7 +230,7 @@ library InternalFatIMTCore {
         // Calculate the depth of the tree after adding the new values.
         // Unlike the 'insert' function, we need a while here as
         // N insertions can increase the tree's depth more than once.
-        while (2 ** treeDepth < oldTreeSize + leaves.length) {
+        while ((1 << treeDepth) < oldTreeSize + leaves.length) {
             ++treeDepth;
         }
         self.depth = treeDepth;
@@ -250,10 +257,12 @@ library InternalFatIMTCore {
             // uint256 numberOfNewNodes = nextLevelSize - nextLevelStartIndex;
             uint256[] memory nextLevelNewNodes = new uint256[](nextLevelSize - nextLevelStartIndex);
 
-            // The only left child that comes from the existing tree (rather than from the new nodes)
-            // is the very first new parent's. Read it once here instead of inside the hot loop below,
-            // which keeps that loop under Solidity's 16-slot stack limit.
-            uint256 boundaryLeftNode = (nextLevelStartIndex * 2 < currentLevelStartIndex)
+            // pre-computed out side the loop to stay under the stack limit
+            // This is safe since it is only one node who boundaries the existing tree
+            // "`startIndex & 1 == 1 ? _getNode() : 0`" The "0" is here for when boundaryLeftNode is never used,
+            // Only when start index is uneven do you hash: hash(storage.nodes[startIndex-1], memory.nodes[startIndex])
+            // otherwise you just read only node from memory (from currentLevelNewNodes)
+            uint256 boundaryLeftNode = currentLevelStartIndex & 1 == 1
                 ? _getNode(self, level, nextLevelStartIndex * 2)
                 : 0;
 
@@ -261,18 +270,21 @@ library InternalFatIMTCore {
                 // packing left and right node in one array saves on the stack size
                 uint256[2] memory hasherInput;
 
-                // Assign the left node using the existing boundary node or the position in the array.
-                if ((i + nextLevelStartIndex) * 2 < currentLevelStartIndex) {
+                // Again check if we need boundaryLeftNode, only applies to first node in arr so `i==0`
+                if (i == 0 && currentLevelStartIndex & 1 == 1) {
                     hasherInput[0] = boundaryLeftNode;
                 } else {
                     hasherInput[0] = currentLevelNewNodes[(i + nextLevelStartIndex) * 2 - currentLevelStartIndex];
                 }
-
-                // Existence of a right child by checking index
-                // zero is a valid leaf now, so `rightChild == 0` can't be used as a proxy.
-                // If a right child exists: assign it and hash(left, right). Otherwise: parent = left.
-                if ((i + nextLevelStartIndex) * 2 + 1 < currentLevelSize) {
-                    hasherInput[1] = currentLevelNewNodes[(i + nextLevelStartIndex) * 2 + 1 - currentLevelStartIndex];
+                // `i` counts parents so we reconstruct it's left childs index by doing:`(i + nextLevelStartIndex) << 1`
+                // then +1 and we have the right child's index
+                // then if that *right* child lays at or out side of currentLevelSize, it means we don't have the -
+                // the *right* child rn, so we hoist the *left* child (we do have) up,
+                /// to be hashed in *a* another iteration
+                if (((i + nextLevelStartIndex) << 1) + 1 < currentLevelSize) {
+                    hasherInput[1] = currentLevelNewNodes[
+                        ((i + nextLevelStartIndex) << 1) + 1 - currentLevelStartIndex
+                    ];
                     // store as parent node for next round
                     nextLevelNewNodes[i] = hasher(hasherInput);
                 } else {
@@ -288,10 +300,7 @@ library InternalFatIMTCore {
                 }
             }
 
-            // Persist every freshly computed parent at its real index. Done in a helper so the
-            // double-mapping store stays out of this frame (stack-limit reasons). No extra sideNode
-            // bookkeeping is needed: the frontier nodes a future insert reads are just regular stored
-            // nodes now.
+            // store every node (outside loop with helper because of stack limit)
             _setNodes(self, level + 1, nextLevelStartIndex, nextLevelNewNodes);
 
             currentLevelStartIndex = nextLevelStartIndex;
@@ -306,7 +315,9 @@ library InternalFatIMTCore {
             currentLevelSize = nextLevelSize;
 
             // Calculate the size of the next level.
-            // The size of the next level is (currentLevelSize - 1) / 2 + 1.
+            // The size of the next level is ceil(n / 2) (-1 +1 to efficiently mimic ceil).
+            // rounded up since odd levelSize would result in a dangle being hoisted up,
+            // so round up to include that hoisted node
             nextLevelSize = ((nextLevelSize - 1) >> 1) + 1;
 
             unchecked {
@@ -321,10 +332,9 @@ library InternalFatIMTCore {
         return currentLevelNewNodes[0];
     }
 
-    /// @dev Returns `hasher(currentNode, currentNode)`, reading the cache when
-    /// warm and computing+storing on a miss. Generic memoizer for `f(x) = H(x, x)`:
-    /// any chain that reaches `currentNode` at any level for any starting value
-    /// shares the same entry. Factored out of the main loop to keep the
+    /// @dev Returns `hasher(value, value)`
+    // from cache if it has it, hashed fresh if not
+    // also stores the fresh hash for future use
     /// per-iteration stack under Solidity's 16-slot limit.
     /// @param self: A storage reference to the 'FatIMTData' struct.
     /// @param value: The value to hash with itself.
@@ -343,18 +353,16 @@ library InternalFatIMTCore {
         return hash;
     }
 
-    /// @dev Appends `amount` leaves all equal to `value` into the tree.
-    /// @notice Worst case costs 3*newDepth hashes regardless of `amount`.
-    /// Best case cost 1*newDepth
-    /// @notice Storage is O(amount): every node of the inserted block is written at its real
-    /// index so the whole tree is readable from storage (needed for proof-less `update`).
-    /// Only the hashing keeps the O(depth) repeated-subtree optimization.
+    /// @dev Efficiently appends n-`amount` many leaves, with the same value in the tree.
+    /// @notice Worst case hash cost is 3*newDepth hashes regardless of `amount`.
+    /// Best case cost 1*newDept. However storage is O(amount): since the fat variant is forced to store all nodes
+    /// Only the hashing keeps the O(newTreeDepth) repeated-subtree optimization.
     ///
     /// Only hashes 3 paths:
     ///  repeatedCenterNode: in the center of the insert,
     ///     these only contain nodes of "a balanced tree with only the same value repeating".
     ///     ex: H(0,0), H(H(0,0),H(0,0)), etc
-    ///     Majority of the hashes the same as a repeatedCenterNode at every level.
+    ///     Majority of the hashes are the same as a repeatedCenterNode at every level.
     ///     Re-using those hashes instead of re-hashing is the core of the optimization here
     ///  lefBoundaryNodes: at the left of the insert who mix with the existing tree.
     ///  rightEdgeNodes: at the right of the insert and tree, tracks potential dangling nodes to to root
@@ -364,7 +372,7 @@ library InternalFatIMTCore {
     /// Best case cost is O(1*newDepth) because both lefBoundaryNodes and rightEdgeNodes,
     /// will use nodes from repeatedCenterNode when ever they can.
     ///  And when a insert results in an balanced tree and previous tree is empty, that is alway the case.
-    ///  So it become O(1*newTreeDepth)
+    ///  So it will always be O(1*newTreeDepth)
     /// @param self: A storage reference to the 'FatIMTData' struct.
     /// @param value: The leaf value to insert `amount` copies of.
     /// @param amount: The number of leaves to append.
@@ -407,7 +415,7 @@ library InternalFatIMTCore {
             self.size = newSize;
         }
 
-        // Nodes at the edges of the insert, and the center where the node only contains zeros:
+        // Nodes used in hashing at the edges of the insert and the center where the node only contains zeros:
         //   lefBoundaryNode = The node at the boundary between the insert and existing tree.
         //   rightEdgeNode = The node that is at the very edge of the tree.
         //   repeatedCenterNode = The node that all sit in the center of the insert and
@@ -468,20 +476,14 @@ library InternalFatIMTCore {
                 }
             }
 
-            // Materialize every node of the inserted block at this level at its real index, so the
-            // fat tree stays fully populated — every node readable from storage. This is required
-            // now that `update` reads siblings straight from storage instead of taking a merkle
-            // proof: any inserted node may later be a sibling on some update path.
-            // The block spans positions [firstIndex>>level, lastIndex>>level]; interior positions are
-            // all the repeated-subtree root for this level (repeatedCenterNode), the two ends are the
-            // boundary/edge nodes. leftBoundaryNode/rightEdgeNode/repeatedCenterNode still hold this
-            // level's values here — the hashing below reassigns them to the next level's.
-            // Storage is now O(amount) instead of O(depth); the hashing above stays O(depth).
+            // stores all repeated nodes and boundary node at this level.
             _setRepeatedRange(
                 self,
                 level,
                 firstIndex >> level,
                 lastIndex >> level,
+                // leftBoundaryNode goes stale when leftIndex == rightIndex,
+                // but this function ignores leftBoundaryNode at that point.
                 leftBoundaryNode,
                 repeatedCenterNode,
                 rightEdgeNode
@@ -612,102 +614,61 @@ library InternalFatIMTCore {
         }
     }
 
-    /// @dev Updates the value of an existing leaf and recalculates hashes
-    /// to maintain tree integrity.
+    /// @dev Updates the value of an existing leaf and re-hashes its path to the root, persisting every
+    /// recomputed node at its real index. Reads each sibling straight from storage — the left sibling
+    /// (`nodes[level][pos - 1]`) for a right child, the right sibling (`nodes[level][pos + 1]`) for a
+    /// left child — unless the node is the dangling right edge at that level (`pos == edgeIndex >> level`),
+    /// which has no sibling and is carried up unchanged. No merkle proof and no caller-supplied oldLeaf
+    /// is required; the old value is read from storage and returned (for the event).
     /// @param self: A storage reference to the 'FatIMTData' struct.
-    /// @param oldLeaf: The value of the leaf that is to be updated.
-    /// @param newLeaf: The new value that will replace the oldLeaf in the tree.
+    /// @param newLeaf: The new value that will replace the current leaf.
     /// @param leafIndex: The index of the leaf to be updated.
-    /// @param proofSiblings: An array of sibling nodes that are necessary to recalculate the path to the root.
-    /// @return The new hash of the updated node after the leaf has been updated.
-    /// @notice Every recomputed node on the path is written back to self.nodes[level][index], keyed by
-    /// its position (derived from leafIndex), so the stored tree stays in sync after the update.
-    /// @notice Contracts using this function with snark based hash functions,
-    /// need to check that the old and newLeaf and proofSiblings are within the snark scalar field.
+    /// @return oldLeaf The value the leaf held before the update.
+    /// @return newRoot The new root after the leaf has been updated.
+    /// @notice Reverts with LeafDoesNotExist if leafIndex is out of range. Contracts using this
+    /// function with snark based hash functions need to check that newLeaf is within the snark
+    /// scalar field.
     function _update(
         FatIMTData storage self,
-        uint256 oldLeaf,
         uint256 newLeaf,
         uint256 leafIndex,
-        uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal returns (uint256) {
+    ) internal returns (uint256 oldLeaf, uint256 newRoot) {
         if (_isInitialized(self) == false) {
             revert NotInitialized();
         }
-        // Cache tree depth to optimize gas
-        uint256 treeDepth = self.depth;
-        if (proofSiblings.length > treeDepth) {
-            revert WrongSiblingNodes();
-        }
-
-        // 2 vars to store intermediate hashes, to hash up to oldRoot and newRoot
-        uint256 newNode = newLeaf;
-        uint256 oldNode = oldLeaf;
-
-        // index of the very last leaf in the tree
-        // tracking this index up the tree, follows the indexes of the nodes in self.sidNodes
         uint256 treeSize = self.size;
-        uint256 edgeIndex = treeSize - 1;
-
-        // because leanIMT is not balanced proofSiblings.length can be smaller then tree depth
-        // we cant just use level so we separately track those 2
-        uint256 siblingIndex = 0;
-
-        // Store the new leaf itself at level 0. For a single-node tree (treeDepth == 0) the leaf IS
-        // the root, so writing it here would corrupt the old-root check below; that case is instead
-        // covered by the post-verification root store (nodes[treeDepth][0] = newNode).
-        if (treeDepth > 0) {
-            self.nodes[0][leafIndex] = newLeaf;
+        if (leafIndex >= treeSize) {
+            revert LeafDoesNotExist();
         }
 
-        // verify merkle proof of oldLeaf from proofSiblings and at the same time calculate the newRoot.
-        // note: this is basically just _proofToRoot twice on old and new leaf, then assert root from oldLeaf is
-        // the current root. The difference is that every recomputed node on the new path is written back to
-        // self.nodes[level][index] so the stored tree reflects the update.
+        oldLeaf = self.nodes[0][leafIndex];
+
+        // overwrite the leaf, then climb re-hashing its path. `leafIndex` doubles as the climbing
+        // position and `newRoot` as the running node; both collapse to the root at the top.
+        newRoot = newLeaf;
+        self.nodes[0][leafIndex] = newLeaf;
+
+        uint256 treeDepth = self.depth;
+        uint256 edgeIndex = treeSize - 1;
         for (uint256 level = 0; level < treeDepth; ) {
-            // leafIndex is odd / is right
-            if ((leafIndex >> level) & 1 == 1) {
-                newNode = hasher([proofSiblings[siblingIndex], newNode]);
-                oldNode = hasher([proofSiblings[siblingIndex], oldNode]);
-
-                unchecked {
-                    ++siblingIndex;
-                }
-            } else {
-                // left child: hash with the right sibling from the proof, unless this node is the
-                // dangling edge of the tree (shares no parent with a right neighbour at this level),
-                // in which case it carries up unchanged.
-                if (leafIndex >> level != edgeIndex >> level) {
-                    newNode = hasher([newNode, proofSiblings[siblingIndex]]);
-                    oldNode = hasher([oldNode, proofSiblings[siblingIndex]]);
-
-                    unchecked {
-                        ++siblingIndex;
-                    }
-                }
+            if (leafIndex & 1 == 1) {
+                // right child: hash with the stored left sibling
+                newRoot = hasher([self.nodes[level][leafIndex - 1], newRoot]);
+            } else if (leafIndex != edgeIndex >> level) {
+                // left child that has a right sibling present in the tree
+                newRoot = hasher([newRoot, self.nodes[level][leafIndex + 1]]);
             }
+            // else: dangling right edge at this level, carried up unchanged
 
-            // Persist the recomputed node one level up, at its index. Defer the root (top level)
-            // until after the proof has been verified against the current (old) root below, so
-            // _root(self) still reads the old top slot at the check.
-            if (level + 1 < treeDepth) {
-                self.nodes[level + 1][leafIndex >> (level + 1)] = newNode;
-            }
+            // move up a level and store the recomputed parent at its index
+            leafIndex >>= 1;
+            self.nodes[level + 1][leafIndex] = newRoot;
 
             unchecked {
                 ++level;
             }
         }
-
-        if (oldNode != _root(self)) {
-            revert WrongSiblingNodes();
-        }
-
-        // proof verified: commit the new root at the top level
-        self.nodes[treeDepth][0] = newNode;
-
-        return newNode;
     }
 
     /// @dev Hashes merkle proof and returns the root the leaf belongs to
@@ -897,90 +858,147 @@ library InternalFatIMTCore {
         return levelState.nodes[0];
     }
 
-    // would save 2 array in memory, more importantly stack pressure
-    function _updateMany(
+    // Per-level scalars for the batch-update fold. Bundled into a struct (mutated in place, like
+    // MultiProofLevelState) so _updateManyLevel takes few enough arguments to stay under the stack limit.
+    struct UpdateManyLevel {
+        uint256 count; // number of known nodes at this level (live prefix of the state arrays)
+        uint256 edgePos; // position of the dangling right edge at this level (treeSize-1 >> level)
+        uint256 level; // current level
+    }
+
+    /// @dev Folds one level of a batch update. Reads the known nodes for this level (values in
+    /// `state.nodes`, positions in `state.positions`, live prefix bounded by `pos.count`) and rewrites
+    /// their parents into the low slots of those same arrays, persisting each parent at
+    /// nodes[level + 1][parentPos]. Advances `pos` (count/edgePos/level) to the next level in place.
+    ///
+    /// Where two known nodes are each other's siblings they are hashed together once — this is where
+    /// joined paths merge, so a shared ancestor is hashed a single time instead of once per leaf.
+    /// Otherwise the one missing sibling is read from storage. A rightmost node with no sibling
+    /// (position == edgePos) is the dangling edge and is carried up unchanged.
+    ///
+    /// `positions` are strictly ascending, so a known sibling is always the very next entry: an odd
+    /// (right) position therefore never has its even left sibling among the known nodes (that node
+    /// would have consumed it), which is why the odd branch always reads from storage. The in-place
+    /// rewrite is safe because the write cursor never overtakes the read index and the only forward
+    /// read (the i+1 sibling) is always still unwritten.
+    function _updateManyLevel(
         FatIMTData storage self,
-        uint256[] calldata oldLeaves,
-        uint256[] calldata newLeaves,
-        MultiProof memory proof,
+        MultiProofLevelState memory state,
+        UpdateManyLevel memory pos,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal returns (uint256) {
-        uint256 leafCount = oldLeaves.length;
-        if (leafCount == 0 || leafCount != proof.leafIndexes.length || leafCount != newLeaves.length) {
-            revert WrongMultiProof();
-        }
+    ) private {
+        uint256 writeSlot = 0;
+        for (uint256 i = 0; i < pos.count; ) {
+            uint256 p = state.positions[i];
+            uint256 parent;
 
-        MultiProofLevelState memory oldLevelState = MultiProofLevelState(
-            new uint256[](leafCount),
-            new uint256[](leafCount)
-        );
-
-        MultiProofLevelState memory newLevelState = MultiProofLevelState(
-            new uint256[](leafCount),
-            new uint256[](leafCount)
-        );
-        MultiProofArrLevelPositions memory newLevelPositions = MultiProofArrLevelPositions(0, 0, 0, proof.edgeIndex, 0);
-
-        MultiProofArrLevelPositions memory oldLevelPositions = MultiProofArrLevelPositions(0, 0, 0, proof.edgeIndex, 0);
-
-        // Seed every proven leaf at level 0, at its real index. Each leaf is then hashed up
-        // from the bottom, so an internal-node value or a wrong index simply produces a
-        // non-matching root — nothing can enter above level 0 un-hashed. Dangling is resolved
-        // while climbing (the edge-carry in _hashMultiProofLevel), derived from `edgeIndex`.
-        for (uint256 i = 0; i < leafCount; i++) {
-            oldLevelState.nodes[i] = oldLeaves[i];
-            newLevelState.nodes[i] = newLeaves[i];
-            oldLevelState.positions[i] = proof.leafIndexes[i];
-            newLevelState.positions[i] = proof.leafIndexes[i];
-            // Store the new leaves at level 0. When treeDepth == 0 a leaf is the root, so defer to
-            // the post-verification root store to avoid corrupting the old-root check below.
-            if (proof.treeDepth > 0) {
-                self.nodes[0][proof.leafIndexes[i]] = newLeaves[i];
-            }
-        }
-        oldLevelPositions.currentNodesFreeSlot = leafCount;
-        newLevelPositions.currentNodesFreeSlot = leafCount;
-
-        for (uint256 level = 0; level < proof.treeDepth; ) {
-            oldLevelPositions.level = level;
-            newLevelPositions.level = level;
-            (oldLevelState, oldLevelPositions) = _hashMultiProofLevel(proof, oldLevelState, oldLevelPositions, hasher);
-            (newLevelState, newLevelPositions) = _hashMultiProofLevel(proof, newLevelState, newLevelPositions, hasher);
-
-            // Persist every recomputed new node one level up, at its real index. Defer the root
-            // (top level) until after the proof is verified, so _root(self) still reads the old
-            // top slot at the check below.
-            if (level + 1 < proof.treeDepth) {
-                for (uint256 j = 0; j < newLevelPositions.currentNodesFreeSlot; ) {
-                    self.nodes[level + 1][newLevelState.positions[j]] = newLevelState.nodes[j];
-                    unchecked {
-                        ++j;
-                    }
+            if (p & 1 == 1) {
+                // right child: its left sibling is never a known node here, read it from storage
+                parent = hasher([_getNode(self, pos.level, p - 1), state.nodes[i]]);
+            } else if (p == pos.edgePos) {
+                // dangling right edge: no sibling, carried up unchanged
+                parent = state.nodes[i];
+            } else if (i + 1 < pos.count && state.positions[i + 1] == p + 1) {
+                // the right sibling is the next known node: joined paths meet, hash the pair once
+                parent = hasher([state.nodes[i], state.nodes[i + 1]]);
+                unchecked {
+                    ++i;
                 }
+            } else {
+                // left child whose right sibling is untouched: read it from storage
+                parent = hasher([state.nodes[i], _getNode(self, pos.level, p + 1)]);
             }
+
+            uint256 parentPos = p >> 1;
+            _setNode(self, pos.level + 1, parentPos, parent);
+            state.nodes[writeSlot] = parent;
+            state.positions[writeSlot] = parentPos;
 
             unchecked {
-                ++level;
+                ++writeSlot;
+                ++i;
             }
         }
-        // Verify the old leaves against the current root BEFORE overwriting anything: _root(self) still
-        // reads the old top slot here. The loop above only wrote intermediate nodes (levels < treeDepth);
-        // the top root slot is written below, once the proof is known good.
-        if (_root(self) != oldLevelState.nodes[0]) {
-            // TODO say wrong root instead? Also in _update?
+
+        // advance to the next level
+        pos.count = writeSlot;
+        pos.edgePos >>= 1;
+        pos.level += 1;
+    }
+
+    /// @dev Seeds level 0 of a batch update: validates each index, records the old leaf, writes the
+    /// new leaf, and fills `state` with the new leaves at their indexes. Split into its own frame so
+    /// `_updateMany` stays under the 16-slot stack limit.
+    /// @return oldLeaves The values the leaves held before the update.
+    function _seedUpdateMany(
+        FatIMTData storage self,
+        uint256[] calldata newLeaves,
+        uint256[] calldata leafIndexes,
+        MultiProofLevelState memory state,
+        uint256 treeSize
+    ) private returns (uint256[] memory oldLeaves) {
+        oldLeaves = new uint256[](newLeaves.length);
+        for (uint256 i = 0; i < newLeaves.length; ) {
+            uint256 leafIndex = leafIndexes[i];
+            if (leafIndex >= treeSize) {
+                revert LeafDoesNotExist();
+            }
+            // Must be strictly ascending (no dupes) so joined siblings sit adjacent. Skinny caught a
+            // bad order via its old-root check; here we just rebuild and write the root, so a wrong
+            // order isn't caught — it would persist a wrong root. Hence enforce it.
+            if (i != 0 && leafIndex <= leafIndexes[i - 1]) {
+                revert WrongMultiProof();
+            }
+            oldLeaves[i] = _getNode(self, 0, leafIndex);
+            state.nodes[i] = newLeaves[i];
+            state.positions[i] = leafIndex;
+            _setNode(self, 0, leafIndex, newLeaves[i]);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @dev Updates many leaves and re-hashes their paths to the root in one bottom-up pass, reading
+    /// every sibling straight from storage — no merkle proof and no caller-supplied oldLeaves. Unlike
+    /// updating each leaf on its own, this folds all paths together level by level, so a node shared
+    /// by several updated paths is hashed exactly once.
+    /// @param self: A storage reference to the 'FatIMTData' struct.
+    /// @param newLeaves: The new values to write (parallel to leafIndexes).
+    /// @param leafIndexes: The indexes of the leaves to update; must be strictly ascending.
+    /// @return oldLeaves The values the leaves held before the update (for the event).
+    /// @return newRoot The new root after all updates.
+    /// @notice Reverts with WrongMultiProof on an empty batch, length mismatch, or non-ascending
+    /// indexes, or LeafDoesNotExist if any index is out of range.
+    function _updateMany(
+        FatIMTData storage self,
+        uint256[] calldata newLeaves,
+        uint256[] calldata leafIndexes,
+        function(uint256[2] memory) view returns (uint256) hasher
+    ) internal returns (uint256[] memory oldLeaves, uint256 newRoot) {
+        uint256 leafCount = newLeaves.length;
+        if (leafCount == 0 || leafCount != leafIndexes.length) {
             revert WrongMultiProof();
         }
-
-        // all proof siblings need to be read and validated.
-        // Very strict but now this function verifies leaves + indexes + proof siblings
-        if (oldLevelPositions.proofSiblingsReadPos != proof.proofSiblings.length) {
-            revert WrongMultiProof();
+        if (_isInitialized(self) == false) {
+            revert NotInitialized();
         }
 
-        // Store the new top root. An update never changes depth, so proof.treeDepth == self.depth.
-        uint256 newRoot = newLevelState.nodes[0];
-        self.nodes[proof.treeDepth][0] = newRoot;
-        return newRoot;
+        uint256 treeSize = self.size;
+
+        // Known nodes for the current level. Seeded with the new leaves at their indexes; the fold
+        // rewrites parents into the low slots of these arrays each level.
+        MultiProofLevelState memory state = MultiProofLevelState(new uint256[](leafCount), new uint256[](leafCount));
+        oldLeaves = _seedUpdateMany(self, newLeaves, leafIndexes, state, treeSize);
+
+        UpdateManyLevel memory pos = UpdateManyLevel(leafCount, treeSize - 1, 0);
+        uint256 treeDepth = self.depth;
+        while (pos.level < treeDepth) {
+            _updateManyLevel(self, state, pos, hasher);
+        }
+
+        // paths all converged to the single top node
+        newRoot = state.nodes[0];
     }
 
     /// @dev Retrieves the root of the tree from the 'nodes' mapping using the

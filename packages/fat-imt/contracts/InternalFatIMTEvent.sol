@@ -141,14 +141,12 @@ library InternalFatIMTEvent {
 
     function _update(
         FatIMTData storage self,
-        uint256 oldLeaf,
         uint256 newLeaf,
         uint256 index,
-        uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
         // update tree
-        uint256 newRoot = InternalFatIMTCore._update(self, oldLeaf, newLeaf, index, proofSiblings, hasher);
+        (uint256 oldLeaf, uint256 newRoot) = InternalFatIMTCore._update(self, newLeaf, index, hasher);
         // emit event
         emit UpdatedLeaf(self.treeId, index, newLeaf, oldLeaf);
         return newRoot;
@@ -156,17 +154,14 @@ library InternalFatIMTEvent {
 
     function _updateBN254(
         FatIMTData storage self,
-        uint256 oldLeaf,
         uint256 newLeaf,
         uint256 index,
-        uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
         // check
         _requireInField(newLeaf);
-        _requireAllInField(proofSiblings);
         // update tree
-        uint256 newRoot = InternalFatIMTCore._update(self, oldLeaf, newLeaf, index, proofSiblings, hasher);
+        (uint256 oldLeaf, uint256 newRoot) = InternalFatIMTCore._update(self, newLeaf, index, hasher);
         // emit event
         emit UpdatedLeaf(self.treeId, index, newLeaf, oldLeaf);
         return newRoot;
@@ -174,22 +169,22 @@ library InternalFatIMTEvent {
 
     function _updateMany(
         FatIMTData storage self,
-        uint256[] calldata oldLeaves,
         uint256[] calldata newLeaves,
         uint256[] calldata leafIndexes,
-        uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
-        // check
+        // check: guards the edgeIndex (size - 1) underflow in the core on an empty tree
         if (self.size == 0) {
             revert TreeEmpty();
         }
 
         // update tree
-        // depth/edgeIndex come from the live tree, never the caller. Built into a local (and the
-        // emit loop split into a helper) to keep this frame under the stack-too-deep limit without viaIR.
-        MultiProof memory proof = MultiProof(self.depth, self.size - 1, leafIndexes, proofSiblings);
-        uint256 newRoot = InternalFatIMTCore._updateMany(self, oldLeaves, newLeaves, proof, hasher);
+        (uint256[] memory oldLeaves, uint256 newRoot) = InternalFatIMTCore._updateMany(
+            self,
+            newLeaves,
+            leafIndexes,
+            hasher
+        );
         // emit event
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
         return newRoot;
@@ -197,24 +192,23 @@ library InternalFatIMTEvent {
 
     function _updateManyBN254(
         FatIMTData storage self,
-        uint256[] calldata oldLeaves,
         uint256[] calldata newLeaves,
         uint256[] calldata leafIndexes,
-        uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
-        // check
+        // check: guards the edgeIndex (size - 1) underflow in the core on an empty tree
         if (self.size == 0) {
             revert TreeEmpty();
         }
         _requireAllInField(newLeaves);
-        _requireAllInField(proofSiblings);
 
         // update tree
-        // depth/edgeIndex come from the live tree, never the caller. Built into a local (and the
-        // emit loop split into a helper) to keep this frame under the stack-too-deep limit without viaIR.
-        MultiProof memory proof = MultiProof(self.depth, self.size - 1, leafIndexes, proofSiblings);
-        uint256 newRoot = InternalFatIMTCore._updateMany(self, oldLeaves, newLeaves, proof, hasher);
+        (uint256[] memory oldLeaves, uint256 newRoot) = InternalFatIMTCore._updateMany(
+            self,
+            newLeaves,
+            leafIndexes,
+            hasher
+        );
         // emit event
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
         return newRoot;

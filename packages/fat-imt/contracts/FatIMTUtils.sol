@@ -25,7 +25,7 @@ error LeafGreaterThanSnarkScalarField();
 function _emitUpdatedMany(
     uint256 treeId,
     uint256[] calldata leafIndexes,
-    uint256[] calldata oldLeaves,
+    uint256[] memory oldLeaves,
     uint256[] calldata newLeaves
 ) {
     for (uint256 i = 0; i < leafIndexes.length; i++) {

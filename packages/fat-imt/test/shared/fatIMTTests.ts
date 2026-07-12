@@ -356,6 +356,31 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                     expect(await fatIMTTest.depth()).to.equal(7)
                 })
             })
+
+            // Guards that the internal nodes an insertManyRepeated writes at a *merge* level are the
+            // correctly-hashed ones, by forcing a later op to READ one. With pre-tree [1,2] then two
+            // 7s at indexes 2,3, positions 2 and 3 converge at level 1 into nodes[1][1] = hash(7,7),
+            // while the (stale) left-boundary value at that level is just 7. The root right after the
+            // repeat-insert is taken from the right edge, so it's correct even if nodes[1][1] is wrong
+            // — the corruption only shows once something reads it. Updating index 0 hashes against
+            // nodes[1][1] as its right sibling at level 1, so a stale merged node diverges the root here.
+            // (Portable to skinny-IMT for gas comparison: same ops, just call the skinny update as
+            // `update(oldLeaf, newLeaf, index, siblings)`.)
+            it("Should store the correct merged node so a later update that reads it stays consistent", async () => {
+                jsLeanIMT.insertMany([1n, 2n])
+                await fatIMTTest.insertMany([1, 2])
+
+                for (let i = 0; i < 2; i++) jsLeanIMT.insert(7n)
+                await fatIMTTest.insertManyRepeated(7, 2)
+
+                // correct straight after the repeat-insert (root comes from the right edge directly)
+                expect(await fatIMTTest.root(), "root after insertManyRepeated").to.equal(jsLeanIMT.root)
+
+                // updating index 0 reads the merged node nodes[1][1] as its level-1 right sibling
+                jsLeanIMT.update(0, 42n)
+                await fatIMTTest.update(42, 0)
+                expect(await fatIMTTest.root(), "root after updating index 0").to.equal(jsLeanIMT.root)
+            })
         })
 
         describe("# precomputeRepeatedCache", () => {
@@ -477,14 +502,15 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
 
         describe("# update", () => {
             it("Should not update a leaf if the leaf does not exist", async () => {
-                const transaction = fatIMTTest.update(2, 1, 0, [1, 2, 3, 4])
+                // empty tree: index 0 is out of range
+                const transaction = fatIMTTest.update(1, 0)
 
-                await expect(transaction).to.be.revertedWithCustomError(fatIMT, "WrongSiblingNodes")
+                await expect(transaction).to.be.revertedWithCustomError(fatIMT, "LeafDoesNotExist")
             })
 
             if (hasSnarkFieldCheck) {
                 it("Should not update a leaf if its value is >= SNARK_SCALAR_FIELD", async () => {
-                    const transaction = fatIMTTest.update(2, SNARK_SCALAR_FIELD, 0, [1, 2, 3, 4])
+                    const transaction = fatIMTTest.update(SNARK_SCALAR_FIELD, 0)
 
                     await expect(transaction).to.be.revertedWithCustomError(fatIMT, "LeafGreaterThanSnarkScalarField")
                 })
@@ -494,9 +520,7 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                 await fatIMTTest.insert(1)
                 jsLeanIMT.insert(BigInt(1))
 
-                const { siblings } = jsLeanIMT.generateProof(0)
-
-                await fatIMTTest.update(1, 2, 0, siblings)
+                await fatIMTTest.update(2, 0)
                 jsLeanIMT.update(0, BigInt(2))
 
                 const root = await fatIMTTest.root()
@@ -511,9 +535,7 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                 jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
                 jsLeanIMT.update(0, BigInt(3))
 
-                const { siblings } = jsLeanIMT.generateProof(0)
-
-                await fatIMTTest.update(1, 3, 0, siblings)
+                await fatIMTTest.update(3, 0)
 
                 const root = await fatIMTTest.root()
 
@@ -536,9 +558,8 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                     const root = await fatIMTTest.root()
                     expect(root).to.equal(jsLeanIMT.root)
                 }
-                const { siblings } = jsLeanIMT.generateProof(0)
 
-                await fatIMTTest.update(oldLeaf, newLeaf, 0, siblings)
+                await fatIMTTest.update(newLeaf, 0)
                 jsLeanIMT.update(jsLeanIMT.indexOf(oldLeaf), newLeaf)
 
                 const root = await fatIMTTest.root()
@@ -547,53 +568,39 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
             })
 
             if (hasSnarkFieldCheck) {
-                it("Should not update a leaf if its index is even and the value of at least one sibling node is >= SNARK_SCALAR_FIELD", async () => {
+                // Mirrors the skinny suite's even/odd sibling-field-check tests. The fat tree reads
+                // its siblings from storage, so there is nothing to field-check on the proof side;
+                // the analogous field check is on `newLeaf`. Kept at both index parities (and with the
+                // same two inserts) so the two suites stay structurally aligned for the gas report.
+                it("Should not update an even-indexed leaf to a value >= SNARK_SCALAR_FIELD", async () => {
                     await fatIMTTest.insert(1)
                     await fatIMTTest.insert(2)
 
-                    jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
-                    jsLeanIMT.update(0, BigInt(3))
-
-                    const { siblings } = jsLeanIMT.generateProof(0)
-
-                    siblings[0] = SNARK_SCALAR_FIELD
-
-                    const transaction = fatIMTTest.update(1, 3, 0, siblings)
+                    // index 0 is even
+                    const transaction = fatIMTTest.update(SNARK_SCALAR_FIELD, 0)
 
                     await expect(transaction).to.be.revertedWithCustomError(fatIMT, "LeafGreaterThanSnarkScalarField")
                 })
 
-                it("Should not update a leaf if its index is odd and the value of at least one sibling node is >= SNARK_SCALAR_FIELD", async () => {
+                it("Should not update an odd-indexed leaf to a value >= SNARK_SCALAR_FIELD", async () => {
                     await fatIMTTest.insert(1)
                     await fatIMTTest.insert(2)
 
-                    jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
-                    jsLeanIMT.update(1, BigInt(3))
-
-                    const { siblings } = jsLeanIMT.generateProof(1)
-
-                    siblings[0] = SNARK_SCALAR_FIELD
-
-                    const transaction = fatIMTTest.update(2, 3, 1, siblings)
+                    // index 1 is odd
+                    const transaction = fatIMTTest.update(SNARK_SCALAR_FIELD, 1)
 
                     await expect(transaction).to.be.revertedWithCustomError(fatIMT, "LeafGreaterThanSnarkScalarField")
                 })
             }
 
-            it("Should not update a leaf if the siblings are wrong", async () => {
+            it("Should not update a leaf whose index is out of range", async () => {
                 await fatIMTTest.insert(1)
                 await fatIMTTest.insert(2)
 
-                jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
-                jsLeanIMT.update(0, BigInt(3))
+                // only indexes 0 and 1 exist
+                const transaction = fatIMTTest.update(3, 2)
 
-                const { siblings } = jsLeanIMT.generateProof(0)
-
-                siblings[0] = BigInt(3)
-
-                const transaction = fatIMTTest.update(1, 3, 0, siblings)
-
-                await expect(transaction).to.be.revertedWithCustomError(fatIMT, "WrongSiblingNodes")
+                await expect(transaction).to.be.revertedWithCustomError(fatIMT, "LeafDoesNotExist")
             })
 
             it("Should update 6 leaves", async () => {
@@ -606,9 +613,7 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                 for (let i = 0; i < 6; i += 1) {
                     jsLeanIMT.update(i, BigInt(i + 7))
 
-                    const { siblings } = jsLeanIMT.generateProof(i)
-
-                    await fatIMTTest.update(i + 1, i + 7, i, siblings)
+                    await fatIMTTest.update(i + 7, i)
 
                     const root = await fatIMTTest.root()
 
@@ -624,8 +629,7 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
 
                 for (let i = 0; i < 3; i += 1) {
                     jsLeanIMT.update(i, BigInt(i + 10))
-                    const { siblings } = jsLeanIMT.generateProof(i)
-                    await fatIMTTest.update(i + 1, i + 10, i, siblings)
+                    await fatIMTTest.update(i + 10, i)
                 }
 
                 for (let i = 5; i < 8; i += 1) {
@@ -637,32 +641,24 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                 expect(root).to.equal(jsLeanIMT.root)
             })
 
-            it("Should not clobber a non-frontier side node when updating (size 11, then insert)", async () => {
-                // Regression guard for the sideNodes refresh condition in _update.
-                //
-                // In a size-11 tree the live side node at level 1 is H(idx8, idx9) — that's the
-                // left sibling the next insert (idx 11) hashes against. Updating index 0 recomputes
-                // H(idx0, idx1) at level 1, but index 0 does NOT share a parent with the last leaf
-                // there, so sideNodes[1] must be left alone.
-                //
-                // The real condition (`leafIndex >> (level+1) == edgeIndex >> (level+1)`) knows that
-                // and skips the write. A liveness-only stand-in such as `(edgeIndex >> level) & 1`
-                // fires here (the edge is at an odd position at level 1) and overwrites sideNodes[1]
-                // with H(idx0, idx1). The corruption is invisible right after the update — it only
-                // surfaces when the next insert reads that slot and the root diverges.
+            it("Should keep the tree consistent for a later insert after updating a non-frontier leaf (size 11)", async () => {
+                // Regression guard: an update must rewrite every node on its path in storage, so a
+                // later insert that reads one of those nodes as its left sibling still gets the right
+                // root. In a size-11 tree the node the next insert (idx 11) hashes against at level 1
+                // is H(idx8, idx9); updating index 0 rewrites H(idx0, idx1) but must leave that
+                // frontier node correct. A stale stored node only surfaces on the following insert.
                 for (let i = 0; i < 11; i += 1) {
                     jsLeanIMT.insert(BigInt(i + 1))
                     await fatIMTTest.insert(i + 1)
                 }
 
-                const { siblings } = jsLeanIMT.generateProof(0)
-                await fatIMTTest.update(1, 99, 0, siblings)
+                await fatIMTTest.update(99, 0)
                 jsLeanIMT.update(0, 99n)
 
                 // Still correct here: the update reconstructs index 0's own path fine.
                 expect(await fatIMTTest.root(), "root immediately after update").to.equal(jsLeanIMT.root)
 
-                // The next insert hashes against sideNodes[1]; a clobbered slot diverges here.
+                // The next insert reads a stored sibling node; a stale slot diverges here.
                 jsLeanIMT.insert(12n)
                 await fatIMTTest.insert(12)
                 expect(await fatIMTTest.root(), "root after a later insert").to.equal(jsLeanIMT.root)
@@ -679,9 +675,7 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                 jsLeanIMT.insertMany([BigInt(1), BigInt(2), BigInt(3)])
                 jsLeanIMT.update(2, BigInt(0))
 
-                const { siblings } = jsLeanIMT.generateProof(2)
-
-                await fatIMTTest.update(3, 0, 2, siblings)
+                await fatIMTTest.update(0, 2)
 
                 const root = await fatIMTTest.root()
 
@@ -698,9 +692,7 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                 for (let i = 0; i < 10; i += 1) {
                     jsLeanIMT.update(i, BigInt(0))
 
-                    const { siblings } = jsLeanIMT.generateProof(i)
-
-                    await fatIMTTest.update(i + 1, 0, i, siblings)
+                    await fatIMTTest.update(0, i)
 
                     const root = await fatIMTTest.root()
 
@@ -742,8 +734,7 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
 
                 jsLeanIMT.update(1, BigInt(0))
 
-                const { siblings } = jsLeanIMT.generateProof(1)
-                await fatIMTTest.update(2, 0, 1, siblings)
+                await fatIMTTest.update(0, 1)
 
                 // leaf 0 sits at real index 1
                 expect(await verifyByRealIndex(0n)).to.equal(true)
@@ -863,8 +854,7 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
             it("Should match a batch built after inserts and an update", async () => {
                 await insertRange(6)
                 jsLeanIMT.update(2, 0n)
-                const { siblings: updateSiblings } = jsLeanIMT.generateProof(2)
-                await fatIMTTest.update(3, 0, 2, updateSiblings)
+                await fatIMTTest.update(0, 2)
 
                 const { leaves, leafIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 2, 4])
                 // None is the last leaf, so all three sit at level 0; index 2 is now 0.
@@ -970,15 +960,16 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                 await fatIMTTest.insertMany(elems)
             }
 
-            // Builds a shared multiproof for `rawIndices` against the CURRENT tree, applies
-            // `makeVal` to each (in ascending-index order) via updateMany on-chain, mirrors the
-            // same updates on the reference tree, and returns the aligned indexes/new values.
+            // Applies `makeVal` to each de-duplicated, ascending index via updateMany on-chain, mirrors
+            // the same updates on the reference tree, and returns the aligned indexes/new values. No
+            // proof or oldLeaves needed — the contract reads every sibling (and the old leaf) straight
+            // from storage. `generateMultiProof` is reused only for its ascending `leafIndexes`.
             async function updateManyDiff(rawIndices: number[], makeVal: (idx: number) => bigint) {
-                const { leaves: oldLeaves, leafIndexes, siblings } = generateMultiProof(jsLeanIMT, rawIndices)
+                const { leafIndexes } = generateMultiProof(jsLeanIMT, rawIndices)
                 const newLeaves = leafIndexes.map((idx) => makeVal(idx))
-                await (await fatIMTTest.updateMany(oldLeaves, newLeaves, leafIndexes, siblings)).wait()
+                await (await fatIMTTest.updateMany(newLeaves, leafIndexes)).wait()
                 leafIndexes.forEach((idx, i) => jsLeanIMT.update(idx, newLeaves[i]))
-                return { leafIndexes, siblings, oldLeaves, newLeaves }
+                return { leafIndexes, newLeaves }
             }
 
             it("Should batch-update several leaves in a balanced tree", async () => {
@@ -1000,12 +991,10 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                 expect(await fatIMTTest.root()).to.equal(jsLeanIMT.root)
             })
 
-            it("Should batch-update every leaf with an empty sibling list", async () => {
+            it("Should batch-update every leaf in the tree", async () => {
                 await insertRange(8)
                 const all = new Array(8).fill(0).map((_, i) => i)
-                const { siblings } = await updateManyDiff(all, (idx) => BigInt(5000 + idx))
-                // When all leaves are supplied, nothing is left to provide.
-                expect(siblings.length).to.equal(0)
+                await updateManyDiff(all, (idx) => BigInt(5000 + idx))
                 expect(await fatIMTTest.root()).to.equal(jsLeanIMT.root)
             })
 
@@ -1060,9 +1049,9 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                     ref.insertMany(initial)
                     await contract.insertMany(initial)
 
-                    const { leaves: oldLeaves, leafIndexes, siblings } = generateMultiProof(ref, indices)
+                    const { leafIndexes } = generateMultiProof(ref, indices)
                     const newLeaves = leafIndexes.map((idx) => BigInt(100000 + size * 100 + idx))
-                    await (await contract.updateMany(oldLeaves, newLeaves, leafIndexes, siblings)).wait()
+                    await (await contract.updateMany(newLeaves, leafIndexes)).wait()
                     leafIndexes.forEach((idx, i) => ref.update(idx, newLeaves[i]))
                     expect(await contract.root(), `size=${size} set=${indices} post-update`).to.equal(ref.root)
 
@@ -1082,51 +1071,45 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
 
             it("Should revert on an empty batch", async () => {
                 await insertRange(8)
-                await expect(fatIMTTest.updateMany([], [], [], [])).to.be.revertedWithCustomError(
+                await expect(fatIMTTest.updateMany([], [])).to.be.revertedWithCustomError(fatIMT, "WrongMultiProof")
+            })
+
+            it("Should revert on an empty tree", async () => {
+                await expect(fatIMTTest.updateMany([2], [0])).to.be.revertedWithCustomError(fatIMT, "TreeEmpty")
+            })
+
+            it("Should revert when newLeaves length differs from leafIndexes", async () => {
+                await insertRange(8)
+                const { leafIndexes } = generateMultiProof(jsLeanIMT, [1, 4])
+                await expect(fatIMTTest.updateMany([111n], leafIndexes)).to.be.revertedWithCustomError(
                     fatIMT,
                     "WrongMultiProof"
                 )
             })
 
-            it("Should revert on an empty tree", async () => {
-                await expect(fatIMTTest.updateMany([1], [2], [0], [])).to.be.revertedWithCustomError(
+            it("Should revert when leafIndexes are not strictly ascending", async () => {
+                await insertRange(8)
+                // descending indexes break the fold's adjacency assumption; must be rejected
+                await expect(fatIMTTest.updateMany([111n, 222n], [4, 1])).to.be.revertedWithCustomError(
                     fatIMT,
-                    "TreeEmpty"
+                    "WrongMultiProof"
                 )
             })
 
-            it("Should revert when newLeaves length differs from leafIndexes", async () => {
+            it("Should revert when a leafIndex is out of range", async () => {
                 await insertRange(8)
-                const { leaves: oldLeaves, leafIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
-                await expect(
-                    fatIMTTest.updateMany(oldLeaves, [111n], leafIndexes, siblings)
-                ).to.be.revertedWithCustomError(fatIMT, "WrongMultiProof")
-            })
-
-            it("Should revert when a wrong oldLeaf breaks the old-root check", async () => {
-                await insertRange(8)
-                const { leaves: oldLeaves, leafIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
-                const tampered = [...oldLeaves]
-                tampered[0] = oldLeaves[0] + 1n
-                await expect(
-                    fatIMTTest.updateMany(tampered, [111n, 222n], leafIndexes, siblings)
-                ).to.be.revertedWithCustomError(fatIMT, "WrongMultiProof")
-            })
-
-            it("Should revert when an extra sibling is supplied", async () => {
-                await insertRange(8)
-                const { leaves: oldLeaves, leafIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
-                await expect(
-                    fatIMTTest.updateMany(oldLeaves, [111n, 222n], leafIndexes, [...siblings, 123n])
-                ).to.be.revertedWithCustomError(fatIMT, "WrongMultiProof")
+                await expect(fatIMTTest.updateMany([111n], [8])).to.be.revertedWithCustomError(
+                    fatIMT,
+                    "LeafDoesNotExist"
+                )
             })
 
             if (hasSnarkFieldCheck) {
                 it("Should reject a newLeaf >= SNARK_SCALAR_FIELD", async () => {
                     await insertRange(8)
-                    const { leaves: oldLeaves, leafIndexes, siblings } = generateMultiProof(jsLeanIMT, [1, 4])
+                    const { leafIndexes } = generateMultiProof(jsLeanIMT, [1, 4])
                     await expect(
-                        fatIMTTest.updateMany(oldLeaves, [111n, SNARK_SCALAR_FIELD], leafIndexes, siblings)
+                        fatIMTTest.updateMany([111n, SNARK_SCALAR_FIELD], leafIndexes)
                     ).to.be.revertedWithCustomError(fatIMT, "LeafGreaterThanSnarkScalarField")
                 })
             }
@@ -1175,9 +1158,8 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                 jsLeanIMT.insert(BigInt(1))
 
                 jsLeanIMT.update(0, BigInt(0))
-                const { siblings } = jsLeanIMT.generateProof(0)
 
-                await fatIMTTest.update(1, 0, 0, siblings)
+                await fatIMTTest.update(0, 0)
                 const proof = jsLeanIMT.generateProof(0)
                 expect(await callVerify(0, 0, proof.siblings)).to.equal(true)
             })
@@ -1191,12 +1173,10 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                 jsLeanIMT.insertMany([BigInt(1), BigInt(2)])
 
                 jsLeanIMT.update(0, BigInt(0))
-                const { siblings } = jsLeanIMT.generateProof(0)
-                await fatIMTTest.update(1, 0, 0, siblings)
+                await fatIMTTest.update(0, 0)
 
                 jsLeanIMT.update(0, BigInt(3))
-                const { siblings: newSiblings } = jsLeanIMT.generateProof(0)
-                await fatIMTTest.update(0, 3, 0, newSiblings)
+                await fatIMTTest.update(3, 0)
 
                 const root = await fatIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
@@ -1248,8 +1228,7 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                 await fatIMTTest.insert(1)
                 await fatIMTTest.insert(2)
 
-                const { siblings } = jsLeanIMT.generateProof(0)
-                await fatIMTTest.update(1, 2, 0, siblings)
+                await fatIMTTest.update(2, 0)
 
                 const root = await fatIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
@@ -1263,8 +1242,7 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                 await fatIMTTest.insert(1)
                 await fatIMTTest.insert(1)
 
-                const { siblings } = jsLeanIMT.generateProof(1)
-                await fatIMTTest.update(1, 5, 1, siblings)
+                await fatIMTTest.update(5, 1)
 
                 const root = await fatIMTTest.root()
                 expect(root).to.equal(jsLeanIMT.root)
@@ -1282,8 +1260,7 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
 
                 // update(1, 5) targets last occurrence (index 1) since leaves[1] points there
                 jsLeanIMT.update(1, BigInt(5))
-                const { siblings } = jsLeanIMT.generateProof(1)
-                await fatIMTTest.update(1, 5, 1, siblings)
+                await fatIMTTest.update(5, 1)
 
                 // leaves[1] is now cleared — the first occurrence at index 0 (still value 1)
                 // is permanently orphaned, has(1) returns false even though 1 exists at index 0
@@ -1291,25 +1268,23 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                 expect(await callVerify(1, 0, proof.siblings)).to.equal(true)
             })
 
-            it("Should not corrupt sideNodes when updating a non-frontier leaf that shares the frontier's value", async () => {
-                // Value 7 sits at BOTH index 0 and index 2. Index 2 is the last leaf,
-                // so sideNodes[0] tracks leaf 2 (= 7). Updating index 0 (also 7) must
-                // leave sideNodes[0] alone — but _update refreshes sideNodes by VALUE
-                // (`sideNodes[level] == oldRoot`), so it matches 7 == 7 and silently
-                // rewrites sideNodes[0] to point at the wrong (updated) node.
+            it("Should not corrupt stored nodes when updating a non-frontier leaf that shares the frontier's value", async () => {
+                // Value 7 sits at BOTH index 0 and index 2. Index 2 is the last leaf, so the node the
+                // next insert hashes against at level 0 is leaf 2 (= 7). Updating index 0 (also 7) must
+                // rewrite index 0's own path only and leave leaf 2's stored node alone — even though the
+                // two share the same value, they are at distinct indexes.
                 await fatIMTTest.insertMany([7, 8, 7])
                 jsLeanIMT.insertMany([7n, 8n, 7n])
 
-                const { siblings } = jsLeanIMT.generateProof(0)
-                await fatIMTTest.update(7, 9, 0, siblings)
+                await fatIMTTest.update(9, 0)
                 jsLeanIMT.update(0, 9n)
 
                 // The update itself reconstructs index 0's path correctly, so the root
-                // is right immediately after — the corruption is invisible here.
+                // is right immediately after.
                 expect(await fatIMTTest.root(), "root immediately after update").to.equal(jsLeanIMT.root)
 
-                // But the next insert hashes against sideNodes[0], which should still be
-                // leaf 2 (= 7). If it was corrupted to 9, the roots diverge.
+                // The next insert reads the stored node at index 2 (= 7); if it was corrupted to 9,
+                // the roots diverge.
                 jsLeanIMT.insert(5n)
                 await fatIMTTest.insert(5)
                 expect(await fatIMTTest.root(), "root after a later insert").to.equal(jsLeanIMT.root)
@@ -1357,8 +1332,7 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                         await contract.insertMany(initial)
 
                         const newVal = BigInt(100000 + size * 100 + idx)
-                        const { siblings } = ref.generateProof(idx)
-                        await contract.update(ref.leaves[idx], newVal, idx, siblings)
+                        await contract.update(newVal, idx)
                         ref.update(idx, newVal)
                         expect(await contract.root(), `size=${size} idx=${idx} post-update`).to.equal(ref.root)
 

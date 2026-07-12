@@ -37,24 +37,16 @@ library FatIMTPoseidon2 {
         return InternalFatIMTEvent._precomputeRepeatedCacheBN254(self, value, upToLevel, hasher);
     }
 
-    function update(
-        FatIMTData storage self,
-        uint256 oldLeaf,
-        uint256 newLeaf,
-        uint256 index,
-        uint256[] calldata proofSiblings
-    ) public returns (uint256) {
-        return InternalFatIMTEvent._updateBN254(self, oldLeaf, newLeaf, index, proofSiblings, hasher);
+    function update(FatIMTData storage self, uint256 newLeaf, uint256 index) public returns (uint256) {
+        return InternalFatIMTEvent._updateBN254(self, newLeaf, index, hasher);
     }
 
     function updateMany(
         FatIMTData storage self,
-        uint256[] calldata oldLeaves,
         uint256[] calldata newLeaves,
-        uint256[] calldata leafIndexes,
-        uint256[] calldata proofSiblings
+        uint256[] calldata leafIndexes
     ) public returns (uint256) {
-        return InternalFatIMTEvent._updateManyBN254(self, oldLeaves, newLeaves, leafIndexes, proofSiblings, hasher);
+        return InternalFatIMTEvent._updateManyBN254(self, newLeaves, leafIndexes, hasher);
     }
 
     function root(FatIMTData storage self) public view returns (uint256) {

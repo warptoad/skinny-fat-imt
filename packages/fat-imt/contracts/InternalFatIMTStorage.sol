@@ -124,63 +124,46 @@ library InternalFatIMTStorage {
 
     function _update(
         FatIMTDataFullNode storage self,
-        uint256 oldLeaf,
         uint256 newLeaf,
         uint256 index,
-        uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
         self.leaves[index] = newLeaf;
-        return InternalFatIMTEvent._update(self.skinnyData, oldLeaf, newLeaf, index, proofSiblings, hasher);
+        return InternalFatIMTEvent._update(self.skinnyData, newLeaf, index, hasher);
     }
 
     function _updateBN254(
         FatIMTDataFullNode storage self,
-        uint256 oldLeaf,
         uint256 newLeaf,
         uint256 index,
-        uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
         self.leaves[index] = newLeaf;
-        return InternalFatIMTEvent._updateBN254(self.skinnyData, oldLeaf, newLeaf, index, proofSiblings, hasher);
+        return InternalFatIMTEvent._updateBN254(self.skinnyData, newLeaf, index, hasher);
     }
 
     function _updateMany(
         FatIMTDataFullNode storage self,
-        uint256[] calldata oldLeaves,
         uint256[] calldata newLeaves,
         uint256[] calldata leafIndexes,
-        uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
         for (uint256 i = 0; i < newLeaves.length; i++) {
             self.leaves[leafIndexes[i]] = newLeaves[i];
         }
-        return
-            InternalFatIMTEvent._updateMany(self.skinnyData, oldLeaves, newLeaves, leafIndexes, proofSiblings, hasher);
+        return InternalFatIMTEvent._updateMany(self.skinnyData, newLeaves, leafIndexes, hasher);
     }
 
     function _updateManyBN254(
         FatIMTDataFullNode storage self,
-        uint256[] calldata oldLeaves,
         uint256[] calldata newLeaves,
         uint256[] calldata leafIndexes,
-        uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
         for (uint256 i = 0; i < newLeaves.length; i++) {
             self.leaves[leafIndexes[i]] = newLeaves[i];
         }
-        return
-            InternalFatIMTEvent._updateManyBN254(
-                self.skinnyData,
-                oldLeaves,
-                newLeaves,
-                leafIndexes,
-                proofSiblings,
-                hasher
-            );
+        return InternalFatIMTEvent._updateManyBN254(self.skinnyData, newLeaves, leafIndexes, hasher);
     }
 
     function _root(FatIMTDataFullNode storage self) internal view returns (uint256) {
