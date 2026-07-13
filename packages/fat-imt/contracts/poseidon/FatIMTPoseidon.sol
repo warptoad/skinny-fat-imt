@@ -17,14 +17,7 @@ library FatIMTPoseidon {
         return InternalFatIMTEvent._init(self);
     }
 
-    function getNodes(
-        FatIMTData storage self,
-        uint256 firstIndex,
-        uint256 endIndex,
-        uint256 level
-    ) public view returns (uint256[] memory) {
-        return InternalFatIMTEvent._getNodes(self, firstIndex, endIndex, level);
-    }
+    // getNodes lives in FatIMTPoseidonVerify to keep this library under the EIP-170 size limit.
 
     function getLeaves(
         FatIMTData storage self,
@@ -54,15 +47,15 @@ library FatIMTPoseidon {
         return InternalFatIMTEvent._precomputeRepeatedCacheBN254(self, value, upToLevel, hasher);
     }
 
-    function update(FatIMTData storage self, uint256 newLeaf, uint256 index) public returns (uint256) {
-        return InternalFatIMTEvent._updateBN254(self, newLeaf, index, hasher);
+    function update(FatIMTData storage self, uint256 newLeaf, uint256 leafIndex) public returns (uint256, uint256) {
+        return InternalFatIMTEvent._updateBN254(self, newLeaf, leafIndex, hasher);
     }
 
     function updateMany(
         FatIMTData storage self,
         uint256[] calldata newLeaves,
         uint256[] calldata leafIndexes
-    ) public returns (uint256) {
+    ) public returns (uint256, uint256[] memory) {
         return InternalFatIMTEvent._updateManyBN254(self, newLeaves, leafIndexes, hasher);
     }
 

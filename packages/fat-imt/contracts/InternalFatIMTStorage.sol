@@ -2,7 +2,6 @@
 pragma solidity ^0.8.4;
 
 import {InternalFatIMTEvent, FatIMTData} from "./InternalFatIMTEvent.sol";
-import {NewLeaf} from "./interfaces/events.sol";
 import {_emitUpdatedMany, _requireInField, _requireAllInField} from "./FatIMTUtils.sol";
 
 // added storage of the leaves to allow syncing with full nodes for leaves older then 1 year
@@ -91,10 +90,9 @@ library InternalFatIMTStorage {
         uint256 amount,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
-        uint256 treeSize = self.skinnyData.size;
+        // leaves are stored here; NewLeaf/RepeatedLeafs events are emitted by the Event layer.
         for (uint256 i = 0; i < amount; i++) {
             self.leaves.push(value);
-            emit NewLeaf(self.skinnyData.treeId, treeSize + i, value);
         }
         return InternalFatIMTEvent._insertManyRepeated(self.skinnyData, value, amount, hasher);
     }
@@ -105,10 +103,9 @@ library InternalFatIMTStorage {
         uint256 amount,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
-        uint256 treeSize = self.skinnyData.size;
+        // leaves are stored here; NewLeaf/RepeatedLeafs events are emitted by the Event layer.
         for (uint256 i = 0; i < amount; i++) {
             self.leaves.push(value);
-            emit NewLeaf(self.skinnyData.treeId, treeSize + i, value);
         }
         return InternalFatIMTEvent._insertManyRepeatedBN254(self.skinnyData, value, amount, hasher);
     }
@@ -134,21 +131,21 @@ library InternalFatIMTStorage {
     function _update(
         FatIMTDataFullNode storage self,
         uint256 newLeaf,
-        uint256 index,
+        uint256 leafIndex,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal returns (uint256) {
-        self.leaves[index] = newLeaf;
-        return InternalFatIMTEvent._update(self.skinnyData, newLeaf, index, hasher);
+    ) internal returns (uint256, uint256) {
+        self.leaves[leafIndex] = newLeaf;
+        return InternalFatIMTEvent._update(self.skinnyData, newLeaf, leafIndex, hasher);
     }
 
     function _updateBN254(
         FatIMTDataFullNode storage self,
         uint256 newLeaf,
-        uint256 index,
+        uint256 leafIndex,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal returns (uint256) {
-        self.leaves[index] = newLeaf;
-        return InternalFatIMTEvent._updateBN254(self.skinnyData, newLeaf, index, hasher);
+    ) internal returns (uint256, uint256) {
+        self.leaves[leafIndex] = newLeaf;
+        return InternalFatIMTEvent._updateBN254(self.skinnyData, newLeaf, leafIndex, hasher);
     }
 
     function _updateMany(
@@ -156,7 +153,7 @@ library InternalFatIMTStorage {
         uint256[] calldata newLeaves,
         uint256[] calldata leafIndexes,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal returns (uint256) {
+    ) internal returns (uint256, uint256[] memory) {
         for (uint256 i = 0; i < newLeaves.length; i++) {
             self.leaves[leafIndexes[i]] = newLeaves[i];
         }
@@ -168,7 +165,7 @@ library InternalFatIMTStorage {
         uint256[] calldata newLeaves,
         uint256[] calldata leafIndexes,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal returns (uint256) {
+    ) internal returns (uint256, uint256[] memory) {
         for (uint256 i = 0; i < newLeaves.length; i++) {
             self.leaves[leafIndexes[i]] = newLeaves[i];
         }
@@ -203,24 +200,24 @@ library InternalFatIMTStorage {
 
     function _proofManyToRoot(
         uint256 treeDepth,
-        uint256 edgeIndex,
+        uint256 treeSize,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal view returns (uint256) {
-        return InternalFatIMTEvent._proofManyToRoot(treeDepth, edgeIndex, leaves, leafIndexes, proofSiblings, hasher);
+        return InternalFatIMTEvent._proofManyToRoot(treeDepth, treeSize, leaves, leafIndexes, proofSiblings, hasher);
     }
 
     function _proofManyToRootBN254(
         uint256 treeDepth,
-        uint256 edgeIndex,
+        uint256 treeSize,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal view returns (uint256) {
         return
-            InternalFatIMTEvent._proofManyToRootBN254(treeDepth, edgeIndex, leaves, leafIndexes, proofSiblings, hasher);
+            InternalFatIMTEvent._proofManyToRootBN254(treeDepth, treeSize, leaves, leafIndexes, proofSiblings, hasher);
     }
 }

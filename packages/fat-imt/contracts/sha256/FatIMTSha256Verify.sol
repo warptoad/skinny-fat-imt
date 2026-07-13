@@ -23,6 +23,19 @@ library FatIMTSha256Verify {
         return InternalFatIMTEvent._root(self);
     }
 
+    /// @notice Batch node getter. Reads the `nodes` mapping, which lives in `FatIMTData` for both the
+    /// plain and full-node trees — a full-node caller passes its `.skinnyData`. Hosted here (rather
+    /// than in the two wrapper libraries) to keep them under the EIP-170 size limit. set level 0 to
+    /// get the leaves.
+    function getNodes(
+        FatIMTData storage self,
+        uint256 firstIndex,
+        uint256 endIndex,
+        uint256 level
+    ) public view returns (uint256[] memory) {
+        return InternalFatIMTEvent._getNodes(self, firstIndex, endIndex, level);
+    }
+
     function proofToRoot(
         uint256 treeDepth,
         uint256 treeSize,
@@ -35,12 +48,12 @@ library FatIMTSha256Verify {
 
     function proofManyToRoot(
         uint256 treeDepth,
-        uint256 edgeIndex,
+        uint256 treeSize,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
     ) public view returns (uint256) {
-        return InternalFatIMTEvent._proofManyToRoot(treeDepth, edgeIndex, leaves, leafIndexes, proofSiblings, hasher);
+        return InternalFatIMTEvent._proofManyToRoot(treeDepth, treeSize, leaves, leafIndexes, proofSiblings, hasher);
     }
 
     function verify(
@@ -73,10 +86,9 @@ library FatIMTSha256Verify {
         if (self.size == 0) {
             revert TreeEmpty();
         }
-        uint256 edgeIndex = self.size - 1;
         uint256 provenRoot = InternalFatIMTEvent._proofManyToRoot(
             self.depth,
-            edgeIndex,
+            self.size,
             leaves,
             leafIndexes,
             proofSiblings,

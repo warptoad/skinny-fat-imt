@@ -17,14 +17,8 @@ library FatIMTSha256FullNode {
         return InternalFatIMTStorage._init(self);
     }
 
-    function getNodes(
-        FatIMTDataFullNode storage self,
-        uint256 firstIndex,
-        uint256 endIndex,
-        uint256 level
-    ) public view returns (uint256[] memory) {
-        return InternalFatIMTStorage._getNodes(self, firstIndex, endIndex, level);
-    }
+    // getNodes lives in FatIMTSha256Verify (call it with `.skinnyData`) to keep this library under
+    // the EIP-170 size limit. getLeaves stays here since it reads this tree's own `leaves` array.
 
     function getLeaves(
         FatIMTDataFullNode storage self,
@@ -57,15 +51,19 @@ library FatIMTSha256FullNode {
         return InternalFatIMTStorage._precomputeRepeatedCache(self, value, upToLevel, hasher);
     }
 
-    function update(FatIMTDataFullNode storage self, uint256 newLeaf, uint256 index) public returns (uint256) {
-        return InternalFatIMTStorage._update(self, newLeaf, index, hasher);
+    function update(
+        FatIMTDataFullNode storage self,
+        uint256 newLeaf,
+        uint256 leafIndex
+    ) public returns (uint256, uint256) {
+        return InternalFatIMTStorage._update(self, newLeaf, leafIndex, hasher);
     }
 
     function updateMany(
         FatIMTDataFullNode storage self,
         uint256[] calldata newLeaves,
         uint256[] calldata leafIndexes
-    ) public returns (uint256) {
+    ) public returns (uint256, uint256[] memory) {
         return InternalFatIMTStorage._updateMany(self, newLeaves, leafIndexes, hasher);
     }
 

@@ -73,21 +73,17 @@ library InternalFatIMTEvent {
         uint256[] calldata leaves,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
-        uint256 startIndex = self.size;
-        uint256 nextIndex = startIndex + leaves.length;
+        // update tree (Core now owns start/next, like _insertManyRepeated)
+        (uint256 newRoot, uint256 startIndex, uint256 nextIndex) = InternalFatIMTCore._insertMany(self, leaves, hasher);
 
         // emit events
         uint256 treeId = self.treeId;
         for (uint256 i = 0; i < leaves.length; ) {
-            uint256 leaf = leaves[i];
-            emit NewLeaf(treeId, startIndex + i, leaf);
+            emit NewLeaf(treeId, startIndex + i, leaves[i]);
             unchecked {
                 ++i;
             }
         }
-
-        // update tree
-        uint256 newRoot = InternalFatIMTCore._insertMany(self, leaves, hasher);
 
         return (newRoot, startIndex, nextIndex);
     }
@@ -97,22 +93,20 @@ library InternalFatIMTEvent {
         uint256[] calldata leaves,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
-        uint256 startIndex = self.size;
-        uint256 nextIndex = startIndex + leaves.length;
+        // check all leaves are in field before mutating the tree
+        _requireAllInField(leaves);
+
+        // update tree (Core now owns start/next, like _insertManyRepeated)
+        (uint256 newRoot, uint256 startIndex, uint256 nextIndex) = InternalFatIMTCore._insertMany(self, leaves, hasher);
 
         // emit events
         uint256 treeId = self.treeId;
         for (uint256 i = 0; i < leaves.length; ) {
-            uint256 leaf = leaves[i];
-            _requireInField(leaf);
-            emit NewLeaf(treeId, startIndex + i, leaf);
+            emit NewLeaf(treeId, startIndex + i, leaves[i]);
             unchecked {
                 ++i;
             }
         }
-
-        // update tree
-        uint256 newRoot = InternalFatIMTCore._insertMany(self, leaves, hasher);
 
         return (newRoot, startIndex, nextIndex);
     }
@@ -124,10 +118,22 @@ library InternalFatIMTEvent {
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
         // update tree
-        (uint256 newRoot, uint256 startIndex, ) = InternalFatIMTCore._insertManyRepeated(self, value, amount, hasher);
-        // emit event
-        uint256 nextIndex = startIndex + amount;
-        emit RepeatedLeafs(self.treeId, startIndex, nextIndex, value);
+        (uint256 newRoot, uint256 startIndex, uint256 nextIndex) = InternalFatIMTCore._insertManyRepeated(
+            self,
+            value,
+            amount,
+            hasher
+        );
+        // emit events. fat-imt stores every node anyway, so a NewLeaf per leaf costs it nothing extra.
+        // (skinny keeps only RepeatedLeafs here, since there per-leaf events would wreck its scaling.)
+        uint256 treeId = self.treeId;
+        for (uint256 i = 0; i < amount; ) {
+            emit NewLeaf(treeId, startIndex + i, value);
+            unchecked {
+                ++i;
+            }
+        }
+        emit RepeatedLeafs(treeId, startIndex, nextIndex, value);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -140,10 +146,22 @@ library InternalFatIMTEvent {
         // check
         _requireInField(value);
         // update tree
-        (uint256 newRoot, uint256 startIndex, ) = InternalFatIMTCore._insertManyRepeated(self, value, amount, hasher);
-        // emit event
-        uint256 nextIndex = startIndex + amount;
-        emit RepeatedLeafs(self.treeId, startIndex, nextIndex, value);
+        (uint256 newRoot, uint256 startIndex, uint256 nextIndex) = InternalFatIMTCore._insertManyRepeated(
+            self,
+            value,
+            amount,
+            hasher
+        );
+        // emit events. fat-imt stores every node anyway, so a NewLeaf per leaf costs it nothing extra.
+        // (skinny keeps only RepeatedLeafs here, since there per-leaf events would wreck its scaling.)
+        uint256 treeId = self.treeId;
+        for (uint256 i = 0; i < amount; ) {
+            emit NewLeaf(treeId, startIndex + i, value);
+            unchecked {
+                ++i;
+            }
+        }
+        emit RepeatedLeafs(treeId, startIndex, nextIndex, value);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -172,29 +190,29 @@ library InternalFatIMTEvent {
     function _update(
         FatIMTData storage self,
         uint256 newLeaf,
-        uint256 index,
+        uint256 leafIndex,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal returns (uint256) {
+    ) internal returns (uint256, uint256) {
         // update tree
-        (uint256 oldLeaf, uint256 newRoot) = InternalFatIMTCore._update(self, newLeaf, index, hasher);
+        (uint256 newRoot, uint256 oldLeaf) = InternalFatIMTCore._update(self, newLeaf, leafIndex, hasher);
         // emit event
-        emit UpdatedLeaf(self.treeId, index, newLeaf, oldLeaf);
-        return newRoot;
+        emit UpdatedLeaf(self.treeId, leafIndex, newLeaf, oldLeaf);
+        return (newRoot, oldLeaf);
     }
 
     function _updateBN254(
         FatIMTData storage self,
         uint256 newLeaf,
-        uint256 index,
+        uint256 leafIndex,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal returns (uint256) {
+    ) internal returns (uint256, uint256) {
         // check
         _requireInField(newLeaf);
         // update tree
-        (uint256 oldLeaf, uint256 newRoot) = InternalFatIMTCore._update(self, newLeaf, index, hasher);
+        (uint256 newRoot, uint256 oldLeaf) = InternalFatIMTCore._update(self, newLeaf, leafIndex, hasher);
         // emit event
-        emit UpdatedLeaf(self.treeId, index, newLeaf, oldLeaf);
-        return newRoot;
+        emit UpdatedLeaf(self.treeId, leafIndex, newLeaf, oldLeaf);
+        return (newRoot, oldLeaf);
     }
 
     function _updateMany(
@@ -202,14 +220,14 @@ library InternalFatIMTEvent {
         uint256[] calldata newLeaves,
         uint256[] calldata leafIndexes,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal returns (uint256) {
+    ) internal returns (uint256, uint256[] memory) {
         // check: guards the edgeIndex (size - 1) underflow in the core on an empty tree
         if (self.size == 0) {
             revert TreeEmpty();
         }
 
         // update tree
-        (uint256[] memory oldLeaves, uint256 newRoot) = InternalFatIMTCore._updateMany(
+        (uint256 newRoot, uint256[] memory oldLeaves) = InternalFatIMTCore._updateMany(
             self,
             newLeaves,
             leafIndexes,
@@ -217,7 +235,7 @@ library InternalFatIMTEvent {
         );
         // emit event
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
-        return newRoot;
+        return (newRoot, oldLeaves);
     }
 
     function _updateManyBN254(
@@ -225,7 +243,7 @@ library InternalFatIMTEvent {
         uint256[] calldata newLeaves,
         uint256[] calldata leafIndexes,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal returns (uint256) {
+    ) internal returns (uint256, uint256[] memory) {
         // check: guards the edgeIndex (size - 1) underflow in the core on an empty tree
         if (self.size == 0) {
             revert TreeEmpty();
@@ -233,7 +251,7 @@ library InternalFatIMTEvent {
         _requireAllInField(newLeaves);
 
         // update tree
-        (uint256[] memory oldLeaves, uint256 newRoot) = InternalFatIMTCore._updateMany(
+        (uint256 newRoot, uint256[] memory oldLeaves) = InternalFatIMTCore._updateMany(
             self,
             newLeaves,
             leafIndexes,
@@ -241,7 +259,7 @@ library InternalFatIMTEvent {
         );
         // emit event
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
-        return newRoot;
+        return (newRoot, oldLeaves);
     }
 
     function _root(FatIMTData storage self) internal view returns (uint256) {
@@ -277,24 +295,28 @@ library InternalFatIMTEvent {
 
     function _proofManyToRoot(
         uint256 treeDepth,
-        uint256 edgeIndex,
+        uint256 treeSize,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal view returns (uint256) {
+        // takes treeSize (like _proofToRoot); Core's MultiProof works off edgeIndex == treeSize - 1
+        if (treeSize == 0) {
+            revert TreeEmpty();
+        }
         // verify
         return
             InternalFatIMTCore._proofManyToRoot(
                 leaves,
-                MultiProof(treeDepth, edgeIndex, leafIndexes, proofSiblings),
+                MultiProof(treeDepth, treeSize - 1, leafIndexes, proofSiblings),
                 hasher
             );
     }
 
     function _proofManyToRootBN254(
         uint256 treeDepth,
-        uint256 edgeIndex,
+        uint256 treeSize,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings,
@@ -303,11 +325,15 @@ library InternalFatIMTEvent {
         // check
         _requireAllInField(leaves);
         _requireAllInField(proofSiblings);
+        // takes treeSize (like _proofToRoot); Core's MultiProof works off edgeIndex == treeSize - 1
+        if (treeSize == 0) {
+            revert TreeEmpty();
+        }
         // verify
         return
             InternalFatIMTCore._proofManyToRoot(
                 leaves,
-                MultiProof(treeDepth, edgeIndex, leafIndexes, proofSiblings),
+                MultiProof(treeDepth, treeSize - 1, leafIndexes, proofSiblings),
                 hasher
             );
     }
