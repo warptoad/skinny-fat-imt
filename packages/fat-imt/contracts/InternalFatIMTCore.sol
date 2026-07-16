@@ -253,8 +253,7 @@ library InternalFatIMTCore {
         // freeing a stack slot in that already stack-tight loop.
         self.size = startIndex + leaves.length;
 
-        // The four per-level trackers, in one memory slot (see InsertManyLevel). Seeded for level 0:
-        // currentLevel* describe the leaves we just appended; nextLevel* is the level above.
+        // The four per-level trackers, in one memory slot
         InsertManyLevel memory lvl = InsertManyLevel({
             currentLevelStartIndex: startIndex,
             currentLevelSize: startIndex + leaves.length,
@@ -730,7 +729,7 @@ library InternalFatIMTCore {
         return node;
     }
 
-    struct MultiProofLevelState {
+    struct MultiProofLevel {
         // One level's known nodes and their positions. The fold rewrites parents in place into
         // the low end of these same arrays: the write cursor (nextNodesFreeSlot) never runs ahead
         // of the read index, and the only forward read (the i+1 sibling) is always still unwritten,
@@ -755,68 +754,63 @@ library InternalFatIMTCore {
     /// entirely from the tree's `edgeIndex`, not from any caller-supplied schedule.
     function _hashMultiProofLevel(
         MultiProof memory proof,
-        MultiProofLevelState memory levelState,
-        MultiProofArrLevelPositions memory levelPos,
+        MultiProofLevel memory lvl,
+        MultiProofArrLevelPositions memory lvlPos,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) private view returns (MultiProofLevelState memory, MultiProofArrLevelPositions memory) {
-        for (uint256 i = 0; i < levelPos.currentNodesFreeSlot; i++) {
+    ) private view returns (MultiProofLevel memory, MultiProofArrLevelPositions memory) {
+        for (uint256 i = 0; i < lvlPos.currentNodesFreeSlot; i++) {
             // hash left or right
-            if (levelState.positions[i] & 1 == 1) {
+            if (lvl.positions[i] & 1 == 1) {
                 // A right-position node whose sibling is also known is consumed at that sibling
                 // (the even node below, which skips forward past this one), so reaching here means
                 // the left sibling isn't in currentNodes and must come from the proof.
-                levelState.nodes[levelPos.nextNodesFreeSlot] = hasher(
-                    [proof.proofSiblings[levelPos.proofSiblingsReadPos], levelState.nodes[i]]
+                lvl.nodes[lvlPos.nextNodesFreeSlot] = hasher(
+                    [proof.proofSiblings[lvlPos.proofSiblingsReadPos], lvl.nodes[i]]
                 );
-                levelState.positions[levelPos.nextNodesFreeSlot] = levelState.positions[i] >> 1;
+                lvl.positions[lvlPos.nextNodesFreeSlot] = lvl.positions[i] >> 1;
 
                 unchecked {
-                    ++levelPos.nextNodesFreeSlot;
-                    ++levelPos.proofSiblingsReadPos;
+                    ++lvlPos.nextNodesFreeSlot;
+                    ++lvlPos.proofSiblingsReadPos;
                 }
             } else {
                 // make sure node index is not at the edge because edges should be carried up a level
                 // TODO these variable names are so long the auto format makes the code unreadable
-                if (levelState.positions[i] != levelPos.edgePos) {
-                    if (
-                        (i + 1) < levelPos.currentNodesFreeSlot &&
-                        (levelState.positions[i + 1] == (levelState.positions[i] + 1))
-                    ) {
+                if (lvl.positions[i] != lvlPos.edgePos) {
+                    if ((i + 1) < lvlPos.currentNodesFreeSlot && (lvl.positions[i + 1] == (lvl.positions[i] + 1))) {
                         // the right sibling is the next node in currentNodes, so hash the pair
                         // here and skip it (avoids reading a left neighbor on the next iteration)
-                        levelState.nodes[levelPos.nextNodesFreeSlot] = hasher(
-                            [levelState.nodes[i], levelState.nodes[i + 1]]
-                        );
-                        levelState.positions[levelPos.nextNodesFreeSlot] = levelState.positions[i] >> 1;
+                        lvl.nodes[lvlPos.nextNodesFreeSlot] = hasher([lvl.nodes[i], lvl.nodes[i + 1]]);
+                        lvl.positions[lvlPos.nextNodesFreeSlot] = lvl.positions[i] >> 1;
                         // up counter to skip next node since we already hashed it.
                         unchecked {
                             ++i;
                         }
                     } else {
-                        levelState.nodes[levelPos.nextNodesFreeSlot] = hasher(
-                            [levelState.nodes[i], proof.proofSiblings[levelPos.proofSiblingsReadPos]]
+                        lvl.nodes[lvlPos.nextNodesFreeSlot] = hasher(
+                            [lvl.nodes[i], proof.proofSiblings[lvlPos.proofSiblingsReadPos]]
                         );
-                        levelState.positions[levelPos.nextNodesFreeSlot] = levelState.positions[i] >> 1;
+                        lvl.positions[lvlPos.nextNodesFreeSlot] = lvl.positions[i] >> 1;
 
                         unchecked {
-                            ++levelPos.proofSiblingsReadPos;
+                            ++lvlPos.proofSiblingsReadPos;
                         }
                     }
                 } else {
-                    levelState.nodes[levelPos.nextNodesFreeSlot] = levelState.nodes[i];
-                    levelState.positions[levelPos.nextNodesFreeSlot] = levelState.positions[i] >> 1;
+                    lvl.nodes[lvlPos.nextNodesFreeSlot] = lvl.nodes[i];
+                    lvl.positions[lvlPos.nextNodesFreeSlot] = lvl.positions[i] >> 1;
                 }
-                ++levelPos.nextNodesFreeSlot;
+                ++lvlPos.nextNodesFreeSlot;
             }
         }
 
         // per level updates
-        levelPos.edgePos >>= 1;
+        lvlPos.edgePos >>= 1;
 
         // parents were written in place into the low slots; that prefix is the next level.
-        levelPos.currentNodesFreeSlot = levelPos.nextNodesFreeSlot;
-        levelPos.nextNodesFreeSlot = 0;
-        return (levelState, levelPos);
+        lvlPos.currentNodesFreeSlot = lvlPos.nextNodesFreeSlot;
+        lvlPos.nextNodesFreeSlot = 0;
+        return (lvl, lvlPos);
     }
 
     // would save 2 array in memory, more importantly stack pressure
@@ -830,26 +824,23 @@ library InternalFatIMTCore {
             revert WrongMultiProof();
         }
 
-        MultiProofLevelState memory levelState = MultiProofLevelState(
-            new uint256[](leafCount),
-            new uint256[](leafCount)
-        );
+        MultiProofLevel memory lvl = MultiProofLevel(new uint256[](leafCount), new uint256[](leafCount));
 
-        MultiProofArrLevelPositions memory levelPositions = MultiProofArrLevelPositions(0, 0, 0, proof.edgeIndex, 0);
+        MultiProofArrLevelPositions memory lvlPos = MultiProofArrLevelPositions(0, 0, 0, proof.edgeIndex, 0);
 
         // Seed every proven leaf at level 0, at its real index. Each leaf is then hashed up
         // from the bottom, so an internal-node value or a wrong index simply produces a
         // non-matching root — nothing can enter above level 0 un-hashed. Dangling is resolved
         // while climbing (the edge-carry in _hashMultiProofLevel), derived from `edgeIndex`.
         for (uint256 i = 0; i < leafCount; i++) {
-            levelState.nodes[i] = leaves[i];
-            levelState.positions[i] = proof.leafIndexes[i];
+            lvl.nodes[i] = leaves[i];
+            lvl.positions[i] = proof.leafIndexes[i];
         }
-        levelPositions.currentNodesFreeSlot = leafCount;
+        lvlPos.currentNodesFreeSlot = leafCount;
 
         for (uint256 level = 0; level < proof.treeDepth; ) {
-            levelPositions.level = level;
-            (levelState, levelPositions) = _hashMultiProofLevel(proof, levelState, levelPositions, hasher);
+            lvlPos.level = level;
+            (lvl, lvlPos) = _hashMultiProofLevel(proof, lvl, lvlPos, hasher);
 
             unchecked {
                 ++level;
@@ -858,10 +849,10 @@ library InternalFatIMTCore {
 
         // all proof siblings need to be read and validated.
         // Very strict but now this function verifies leaves + indexes + proof siblings
-        if (levelPositions.proofSiblingsReadPos != proof.proofSiblings.length) {
+        if (lvlPos.proofSiblingsReadPos != proof.proofSiblings.length) {
             revert WrongMultiProof();
         }
-        return levelState.nodes[0];
+        return lvl.nodes[0];
     }
 
     // Per-level scalars for the batch-update fold. Bundled into a struct (mutated in place, like
@@ -873,53 +864,41 @@ library InternalFatIMTCore {
         uint256 level; // current level
     }
 
-    /// @dev Folds one level of a batch update. Reads the known nodes for this level (values in
-    /// `state.nodes`, positions in `state.positions`, live prefix bounded by `pos.count`) and rewrites
-    /// their parents into the low slots of those same arrays, persisting each parent at
-    /// nodes[level + 1][parentPos]. Advances `pos` (count/edgePos/level) to the next level in place.
-    ///
-    /// Where two known nodes are each other's siblings they are hashed together once — this is where
-    /// joined paths merge, so a shared ancestor is hashed a single time instead of once per leaf.
-    /// Otherwise the one missing sibling is read from storage. A rightmost node with no sibling
-    /// (position == edgePos) is the dangling edge and is carried up unchanged.
-    ///
-    /// `positions` are strictly ascending, so a known sibling is always the very next entry: an odd
-    /// (right) position therefore never has its even left sibling among the known nodes (that node
-    /// would have consumed it), which is why the odd branch always reads from storage. The in-place
-    /// rewrite is safe because the write cursor never overtakes the read index and the only forward
-    /// read (the i+1 sibling) is always still unwritten.
+    /// @dev _updateMany cant re-use _hashMultiProofLevel like in skinny-imt since it assumes a merkle proof exists
+    /// this function efficiently walks up one level of the hash path of multiple nodes in an update
+    /// it loops
     function _updateManyLevel(
         FatIMTData storage self,
-        MultiProofLevelState memory state,
-        UpdateManyLevel memory pos,
+        MultiProofLevel memory lvl,
+        UpdateManyLevel memory lvlPos,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) private {
+    ) private returns (MultiProofLevel memory, UpdateManyLevel memory) {
         uint256 writeSlot = 0;
-        for (uint256 i = 0; i < pos.count; ) {
-            uint256 p = state.positions[i];
+        for (uint256 i = 0; i < lvlPos.count; ) {
+            uint256 nodeIndex = lvl.positions[i];
             uint256 parent;
 
-            if (p & 1 == 1) {
+            if (nodeIndex & 1 == 1) {
                 // right child: its left sibling is never a known node here, read it from storage
-                parent = hasher([_getNode(self, p - 1, pos.level), state.nodes[i]]);
-            } else if (p == pos.edgePos) {
+                parent = hasher([_getNode(self, nodeIndex - 1, lvlPos.level), lvl.nodes[i]]);
+            } else if (nodeIndex == lvlPos.edgePos) {
                 // dangling right edge: no sibling, carried up unchanged
-                parent = state.nodes[i];
-            } else if (i + 1 < pos.count && state.positions[i + 1] == p + 1) {
+                parent = lvl.nodes[i];
+            } else if (i + 1 < lvlPos.count && lvl.positions[i + 1] == nodeIndex + 1) {
                 // the right sibling is the next known node: joined paths meet, hash the pair once
-                parent = hasher([state.nodes[i], state.nodes[i + 1]]);
+                parent = hasher([lvl.nodes[i], lvl.nodes[i + 1]]);
                 unchecked {
                     ++i;
                 }
             } else {
                 // left child whose right sibling is untouched: read it from storage
-                parent = hasher([state.nodes[i], _getNode(self, p + 1, pos.level)]);
+                parent = hasher([lvl.nodes[i], _getNode(self, nodeIndex + 1, lvlPos.level)]);
             }
 
-            uint256 parentPos = p >> 1;
-            _setNode(self, parentPos, parent, pos.level + 1);
-            state.nodes[writeSlot] = parent;
-            state.positions[writeSlot] = parentPos;
+            uint256 parentPos = nodeIndex >> 1;
+            _setNode(self, parentPos, parent, lvlPos.level + 1);
+            lvl.nodes[writeSlot] = parent;
+            lvl.positions[writeSlot] = parentPos;
 
             unchecked {
                 ++writeSlot;
@@ -928,9 +907,10 @@ library InternalFatIMTCore {
         }
 
         // advance to the next level
-        pos.count = writeSlot;
-        pos.edgePos >>= 1;
-        pos.level += 1;
+        lvlPos.count = writeSlot;
+        lvlPos.edgePos >>= 1;
+        lvlPos.level += 1;
+        return (lvl, lvlPos);
     }
 
     /// @dev Seeds level 0 of a batch update: validates each index, records the old leaf, writes the
@@ -941,7 +921,7 @@ library InternalFatIMTCore {
         FatIMTData storage self,
         uint256[] calldata newLeaves,
         uint256[] calldata leafIndexes,
-        MultiProofLevelState memory state,
+        MultiProofLevel memory lvl,
         uint256 treeSize
     ) private returns (uint256[] memory) {
         uint256[] memory oldLeaves = new uint256[](newLeaves.length);
@@ -957,8 +937,8 @@ library InternalFatIMTCore {
                 revert WrongMultiProof();
             }
             oldLeaves[i] = _getNode(self, leafIndex, 0);
-            state.nodes[i] = newLeaves[i];
-            state.positions[i] = leafIndex;
+            lvl.nodes[i] = newLeaves[i];
+            lvl.positions[i] = leafIndex;
             _setNode(self, leafIndex, newLeaves[i], 0);
             unchecked {
                 ++i;
@@ -996,17 +976,18 @@ library InternalFatIMTCore {
 
         // Known nodes for the current level. Seeded with the new leaves at their indexes; the fold
         // rewrites parents into the low slots of these arrays each level.
-        MultiProofLevelState memory state = MultiProofLevelState(new uint256[](leafCount), new uint256[](leafCount));
-        uint256[] memory oldLeaves = _seedUpdateMany(self, newLeaves, leafIndexes, state, treeSize);
+        MultiProofLevel memory lvl = MultiProofLevel(new uint256[](leafCount), new uint256[](leafCount));
+        uint256[] memory oldLeaves = _seedUpdateMany(self, newLeaves, leafIndexes, lvl, treeSize);
 
-        UpdateManyLevel memory pos = UpdateManyLevel(leafCount, treeSize - 1, 0);
+        UpdateManyLevel memory lvlPos = UpdateManyLevel(leafCount, treeSize - 1, 0);
         uint256 treeDepth = self.depth;
-        while (pos.level < treeDepth) {
-            _updateManyLevel(self, state, pos, hasher);
+        for (lvlPos.level = 0; lvlPos.level < treeDepth; ) {
+            // note: _updateManyLevel does ++lvlPos.level (this to safe on stack size)
+            (lvl, lvlPos) = _updateManyLevel(self, lvl, lvlPos, hasher);
         }
 
         // paths all converged to the single top node; return it with the pre-update leaves
-        return (state.nodes[0], oldLeaves);
+        return (lvl.nodes[0], oldLeaves);
     }
 
     /// @dev Retrieves the root of the tree from the 'nodes' mapping using the
