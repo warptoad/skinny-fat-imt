@@ -27,7 +27,7 @@ library InternalSkinnyIMTStorage {
     ) internal view returns (uint256[] memory) {
         uint256[] memory leaves = new uint256[](endIndex - firstIndex);
         for (uint256 i = 0; i < leaves.length; i++) {
-            leaves[i] = self.leaves[firstIndex + 1];
+            leaves[i] = self.leaves[firstIndex + i];
         }
         return leaves;
     }

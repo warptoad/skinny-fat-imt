@@ -17,6 +17,16 @@ library SkinnyIMTSha256FullNode {
         return InternalSkinnyIMTStorage._init(self);
     }
 
+    // Only the FullNode variant stores the `leaves` array, so this getter lives here (the non-full
+    // wrappers are event-only and have nothing to read).
+    function getLeaves(
+        SkinnyIMTDataFullNode storage self,
+        uint256 firstIndex,
+        uint256 endIndex
+    ) public view returns (uint256[] memory) {
+        return InternalSkinnyIMTStorage._getLeaves(self, firstIndex, endIndex);
+    }
+
     function insert(SkinnyIMTDataFullNode storage self, uint256 leaf) public returns (uint256, uint256) {
         return InternalSkinnyIMTStorage._insert(self, leaf, hasher);
     }

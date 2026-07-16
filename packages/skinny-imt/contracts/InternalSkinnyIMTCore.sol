@@ -88,7 +88,7 @@ library InternalSkinnyIMTCore {
         // A new insertion can increase a tree's depth by at most 1,
         // and only if the number of leaves supported by the current
         // depth is less than the number of leaves to be supported after insertion.
-        if (2 ** treeDepth < index + 1) {
+        if ((1 << treeDepth) < index + 1) {
             ++treeDepth;
         }
 
@@ -152,7 +152,7 @@ library InternalSkinnyIMTCore {
         // Calculate the depth of the tree after adding the new values.
         // Unlike the 'insert' function, we need a while here as
         // N insertions can increase the tree's depth more than once.
-        while (2 ** treeDepth < oldTreeSize + leaves.length) {
+        while ((1 << treeDepth) < oldTreeSize + leaves.length) {
             ++treeDepth;
         }
         self.depth = treeDepth;
@@ -316,7 +316,7 @@ library InternalSkinnyIMTCore {
             // assignments; scoped to a block so its slot is released before
             // the main loop (Solidity's 16-slot stack is tight here).
             uint256 newSize = firstIndex + amount;
-            while (2 ** newTreeDepth < newSize) {
+            while (1 << newTreeDepth < newSize) {
                 unchecked {
                     ++newTreeDepth;
                 }

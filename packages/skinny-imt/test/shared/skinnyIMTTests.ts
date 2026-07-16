@@ -365,6 +365,24 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
                     expect(await skinnyIMTTest.depth()).to.equal(7)
                 })
             })
+
+            // mainly needed in fat but also done here to match gas result a little bit more
+            it("Should store the correct merged node so a later update that reads it stays consistent", async () => {
+                jsLeanIMT.insertMany([1n, 2n])
+                await skinnyIMTTest.insertMany([1, 2])
+
+                for (let i = 0; i < 2; i++) jsLeanIMT.insert(7n)
+                await skinnyIMTTest.insertManyRepeated(7, 2)
+
+                // correct straight after the repeat-insert (root comes from the right edge directly)
+                expect(await skinnyIMTTest.root(), "root after insertManyRepeated").to.equal(jsLeanIMT.root)
+
+                // updating index 0 hashes against the merged node hash(7,7) as its level-1 sibling
+                const { siblings } = jsLeanIMT.generateProof(0)
+                await skinnyIMTTest.update(1, 42, 0, siblings)
+                jsLeanIMT.update(0, 42n)
+                expect(await skinnyIMTTest.root(), "root after updating index 0").to.equal(jsLeanIMT.root)
+            })
         })
 
         describe("# precomputeRepeatedCache", () => {
