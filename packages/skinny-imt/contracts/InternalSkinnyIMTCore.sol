@@ -139,7 +139,7 @@ library InternalSkinnyIMTCore {
             revert NotInitialized();
         }
         // cache treeSize
-        uint256 oldTreeSize = self.size;
+        uint256 startIndex = self.size;
 
         // Array to save the nodes that will be used to create the next level of the tree.
         uint256[] memory currentLevelNewNodes;
@@ -152,16 +152,16 @@ library InternalSkinnyIMTCore {
         // Calculate the depth of the tree after adding the new values.
         // Unlike the 'insert' function, we need a while here as
         // N insertions can increase the tree's depth more than once.
-        while ((1 << treeDepth) < oldTreeSize + leaves.length) {
+        while ((1 << treeDepth) < startIndex + leaves.length) {
             ++treeDepth;
         }
         self.depth = treeDepth;
 
         // First index to change in every level.
-        uint256 currentLevelStartIndex = oldTreeSize;
+        uint256 currentLevelStartIndex = startIndex;
 
         // Size of the level used to create the next level.
-        uint256 currentLevelSize = oldTreeSize + leaves.length;
+        uint256 currentLevelSize = startIndex + leaves.length;
 
         // The index where changes begin at the next level. currentLevelStartIndex / 2
         uint256 nextLevelStartIndex = currentLevelStartIndex >> 1;
@@ -179,17 +179,19 @@ library InternalSkinnyIMTCore {
                 uint256[2] memory hasherInput;
 
                 // Assign the left node using the saved path or the position in the array.
-                if ((i + nextLevelStartIndex) * 2 < currentLevelStartIndex) {
+                if (((i + nextLevelStartIndex) << 1) < currentLevelStartIndex) {
                     hasherInput[0] = self.sideNodes[level];
                 } else {
-                    hasherInput[0] = currentLevelNewNodes[(i + nextLevelStartIndex) * 2 - currentLevelStartIndex];
+                    hasherInput[0] = currentLevelNewNodes[((i + nextLevelStartIndex) << 1) - currentLevelStartIndex];
                 }
 
                 // Existence of a right child by checking index
                 // zero is a valid leaf now, so `rightChild == 0` can't be used as a proxy.
                 // If a right child exists: assign it and hash(left, right). Otherwise: parent = left.
-                if ((i + nextLevelStartIndex) * 2 + 1 < currentLevelSize) {
-                    hasherInput[1] = currentLevelNewNodes[(i + nextLevelStartIndex) * 2 + 1 - currentLevelStartIndex];
+                if (((i + nextLevelStartIndex) << 1) + 1 < currentLevelSize) {
+                    hasherInput[1] = currentLevelNewNodes[
+                        ((i + nextLevelStartIndex) << 1) + 1 - currentLevelStartIndex
+                    ];
                     // store as parent node for next round
                     nextLevelNewNodes[i] = hasher(hasherInput);
                 } else {
@@ -217,7 +219,7 @@ library InternalSkinnyIMTCore {
             // new leaf count). At the other levels the next insert overwrites the slot
             // before reading it, so the store would be dead. (Computed inline rather than
             // cached in a local — the surrounding function is at the 16-slot stack limit.)
-            if (((oldTreeSize + leaves.length) >> level) & 1 == 1) {
+            if (((startIndex + leaves.length) >> level) & 1 == 1) {
                 if (currentLevelSize & 1 == 1) {
                     // currentLevelSize % 2 == 1, is odd
                     // currentLevelSize = treeSize + leaves.length
@@ -249,7 +251,7 @@ library InternalSkinnyIMTCore {
         }
 
         // Update tree size
-        self.size = oldTreeSize + leaves.length;
+        self.size = startIndex + leaves.length;
 
         self.sideNodes[treeDepth] = currentLevelNewNodes[0];
 
@@ -700,7 +702,7 @@ library InternalSkinnyIMTCore {
         return node;
     }
 
-    struct MultiProofLevelState {
+    struct MultiProofLevel {
         // One level's known nodes and their positions. The fold rewrites parents in place into
         // the low end of these same arrays: the write cursor (nextNodesFreeSlot) never runs ahead
         // of the read index, and the only forward read (the i+1 sibling) is always still unwritten,
@@ -727,10 +729,10 @@ library InternalSkinnyIMTCore {
     /// entirely from the tree's `edgeIndex`, not from any caller-supplied schedule.
     function _hashMultiProofLevel(
         MultiProof memory proof,
-        MultiProofLevelState memory levelState,
-        MultiProofArrLevelPositions memory levelPos,
+        MultiProofLevel memory lvl,
+        MultiProofArrLevelPositions memory lvlPos,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) private view returns (MultiProofLevelState memory, MultiProofArrLevelPositions memory) {
+    ) private view returns (MultiProofLevel memory, MultiProofArrLevelPositions memory) {
         // The sideNode at this level is, by definition, the node at position (treeSize >> level) - 1,
         // and it only exists (is read by a future insert) when this level is live: (treeSize >> level) & 1 == 1.
         // That position is always even (a left / left-frontier node), so the main loop below always visits it
@@ -739,74 +741,69 @@ library InternalSkinnyIMTCore {
         // it into self.sideNodes[level]. This uniformly covers the "shares a parent with the edge" case and the
         // dangling-edge case, and stores the node AT this level (never its parent).
         uint256 treeSize = proof.edgeIndex + 1;
-        uint256 frontierPos = ((treeSize >> levelPos.level) & 1 == 1)
-            ? (treeSize >> levelPos.level) - 1
+        uint256 frontierPos = ((treeSize >> lvlPos.level) & 1 == 1)
+            ? (treeSize >> lvlPos.level) - 1
             : type(uint256).max;
 
-        levelPos.isNewSideNode = false;
-        for (uint256 i = 0; i < levelPos.currentNodesFreeSlot; i++) {
-            if (levelState.positions[i] == frontierPos) {
-                levelPos.newSideNode = levelState.nodes[i];
-                levelPos.isNewSideNode = true;
+        lvlPos.isNewSideNode = false;
+        for (uint256 i = 0; i < lvlPos.currentNodesFreeSlot; i++) {
+            if (lvl.positions[i] == frontierPos) {
+                lvlPos.newSideNode = lvl.nodes[i];
+                lvlPos.isNewSideNode = true;
             }
 
             // hash left or right
-            if (levelState.positions[i] & 1 == 1) {
+            if (lvl.positions[i] & 1 == 1) {
                 // A right-position node whose sibling is also known is consumed at that sibling
                 // (the even node below, which skips forward past this one), so reaching here means
                 // the left sibling isn't in currentNodes and must come from the proof.
-                levelState.nodes[levelPos.nextNodesFreeSlot] = hasher(
-                    [proof.proofSiblings[levelPos.proofSiblingsReadPos], levelState.nodes[i]]
+                lvl.nodes[lvlPos.nextNodesFreeSlot] = hasher(
+                    [proof.proofSiblings[lvlPos.proofSiblingsReadPos], lvl.nodes[i]]
                 );
-                levelState.positions[levelPos.nextNodesFreeSlot] = levelState.positions[i] >> 1;
+                lvl.positions[lvlPos.nextNodesFreeSlot] = lvl.positions[i] >> 1;
 
                 unchecked {
-                    ++levelPos.nextNodesFreeSlot;
-                    ++levelPos.proofSiblingsReadPos;
+                    ++lvlPos.nextNodesFreeSlot;
+                    ++lvlPos.proofSiblingsReadPos;
                 }
             } else {
                 // make sure node index is not at the edge because edges should be carried up a level
                 // TODO these variable names are so long the auto format makes the code unreadable
-                if (levelState.positions[i] != levelPos.edgePos) {
-                    if (
-                        (i + 1) < levelPos.currentNodesFreeSlot &&
-                        (levelState.positions[i + 1] == (levelState.positions[i] + 1))
-                    ) {
+                if (lvl.positions[i] != lvlPos.edgePos) {
+                    if ((i + 1) < lvlPos.currentNodesFreeSlot && (lvl.positions[i + 1] == (lvl.positions[i] + 1))) {
                         // the right sibling is the next node in currentNodes, so hash the pair
                         // here and skip it (avoids reading a left neighbor on the next iteration)
-                        levelState.nodes[levelPos.nextNodesFreeSlot] = hasher(
-                            [levelState.nodes[i], levelState.nodes[i + 1]]
-                        );
-                        levelState.positions[levelPos.nextNodesFreeSlot] = levelState.positions[i] >> 1;
+                        lvl.nodes[lvlPos.nextNodesFreeSlot] = hasher([lvl.nodes[i], lvl.nodes[i + 1]]);
+                        lvl.positions[lvlPos.nextNodesFreeSlot] = lvl.positions[i] >> 1;
                         // up counter to skip next node since we already hashed it.
                         unchecked {
                             ++i;
                         }
                     } else {
-                        levelState.nodes[levelPos.nextNodesFreeSlot] = hasher(
-                            [levelState.nodes[i], proof.proofSiblings[levelPos.proofSiblingsReadPos]]
+                        lvl.nodes[lvlPos.nextNodesFreeSlot] = hasher(
+                            [lvl.nodes[i], proof.proofSiblings[lvlPos.proofSiblingsReadPos]]
                         );
-                        levelState.positions[levelPos.nextNodesFreeSlot] = levelState.positions[i] >> 1;
+                        lvl.positions[lvlPos.nextNodesFreeSlot] = lvl.positions[i] >> 1;
 
                         unchecked {
-                            ++levelPos.proofSiblingsReadPos;
+                            ++lvlPos.proofSiblingsReadPos;
                         }
                     }
                 } else {
-                    levelState.nodes[levelPos.nextNodesFreeSlot] = levelState.nodes[i];
-                    levelState.positions[levelPos.nextNodesFreeSlot] = levelState.positions[i] >> 1;
+                    lvl.nodes[lvlPos.nextNodesFreeSlot] = lvl.nodes[i];
+                    lvl.positions[lvlPos.nextNodesFreeSlot] = lvl.positions[i] >> 1;
                 }
-                ++levelPos.nextNodesFreeSlot;
+                ++lvlPos.nextNodesFreeSlot;
             }
         }
 
         // per level updates
-        levelPos.edgePos >>= 1;
+        lvlPos.edgePos >>= 1;
 
         // parents were written in place into the low slots; that prefix is the next level.
-        levelPos.currentNodesFreeSlot = levelPos.nextNodesFreeSlot;
-        levelPos.nextNodesFreeSlot = 0;
-        return (levelState, levelPos);
+        lvlPos.currentNodesFreeSlot = lvlPos.nextNodesFreeSlot;
+        lvlPos.nextNodesFreeSlot = 0;
+        return (lvl, lvlPos);
     }
 
     // would save 2 array in memory, more importantly stack pressure
@@ -820,34 +817,23 @@ library InternalSkinnyIMTCore {
             revert WrongMultiProof();
         }
 
-        MultiProofLevelState memory levelState = MultiProofLevelState(
-            new uint256[](leafCount),
-            new uint256[](leafCount)
-        );
+        MultiProofLevel memory lvl = MultiProofLevel(new uint256[](leafCount), new uint256[](leafCount));
 
-        MultiProofArrLevelPositions memory levelPositions = MultiProofArrLevelPositions(
-            0,
-            0,
-            0,
-            proof.edgeIndex,
-            0,
-            0,
-            false
-        );
+        MultiProofArrLevelPositions memory lvlPos = MultiProofArrLevelPositions(0, 0, 0, proof.edgeIndex, 0, 0, false);
 
         // Seed every proven leaf at level 0, at its real index. Each leaf is then hashed up
         // from the bottom, so an internal-node value or a wrong index simply produces a
         // non-matching root — nothing can enter above level 0 un-hashed. Dangling is resolved
         // while climbing (the edge-carry in _hashMultiProofLevel), derived from `edgeIndex`.
         for (uint256 i = 0; i < leafCount; i++) {
-            levelState.nodes[i] = leaves[i];
-            levelState.positions[i] = proof.leafIndexes[i];
+            lvl.nodes[i] = leaves[i];
+            lvl.positions[i] = proof.leafIndexes[i];
         }
-        levelPositions.currentNodesFreeSlot = leafCount;
+        lvlPos.currentNodesFreeSlot = leafCount;
 
         for (uint256 level = 0; level < proof.treeDepth; ) {
-            levelPositions.level = level;
-            (levelState, levelPositions) = _hashMultiProofLevel(proof, levelState, levelPositions, hasher);
+            lvlPos.level = level;
+            (lvl, lvlPos) = _hashMultiProofLevel(proof, lvl, lvlPos, hasher);
 
             unchecked {
                 ++level;
@@ -856,10 +842,10 @@ library InternalSkinnyIMTCore {
 
         // all proof siblings need to be read and validated.
         // Very strict but now this function verifies leaves + indexes + proof siblings
-        if (levelPositions.proofSiblingsReadPos != proof.proofSiblings.length) {
+        if (lvlPos.proofSiblingsReadPos != proof.proofSiblings.length) {
             revert WrongMultiProof();
         }
-        return levelState.nodes[0];
+        return lvl.nodes[0];
     }
 
     // would save 2 array in memory, more importantly stack pressure
@@ -875,16 +861,10 @@ library InternalSkinnyIMTCore {
             revert WrongMultiProof();
         }
 
-        MultiProofLevelState memory oldLevelState = MultiProofLevelState(
-            new uint256[](leafCount),
-            new uint256[](leafCount)
-        );
+        MultiProofLevel memory oldLvl = MultiProofLevel(new uint256[](leafCount), new uint256[](leafCount));
 
-        MultiProofLevelState memory newLevelState = MultiProofLevelState(
-            new uint256[](leafCount),
-            new uint256[](leafCount)
-        );
-        MultiProofArrLevelPositions memory newLevelPositions = MultiProofArrLevelPositions(
+        MultiProofLevel memory newLvl = MultiProofLevel(new uint256[](leafCount), new uint256[](leafCount));
+        MultiProofArrLevelPositions memory newLvlPos = MultiProofArrLevelPositions(
             0,
             0,
             0,
@@ -894,7 +874,7 @@ library InternalSkinnyIMTCore {
             false
         );
 
-        MultiProofArrLevelPositions memory oldLevelPositions = MultiProofArrLevelPositions(
+        MultiProofArrLevelPositions memory oldLvlPos = MultiProofArrLevelPositions(
             0,
             0,
             0,
@@ -909,22 +889,22 @@ library InternalSkinnyIMTCore {
         // non-matching root — nothing can enter above level 0 un-hashed. Dangling is resolved
         // while climbing (the edge-carry in _hashMultiProofLevel), derived from `edgeIndex`.
         for (uint256 i = 0; i < leafCount; i++) {
-            oldLevelState.nodes[i] = oldLeaves[i];
-            newLevelState.nodes[i] = newLeaves[i];
-            oldLevelState.positions[i] = proof.leafIndexes[i];
-            newLevelState.positions[i] = proof.leafIndexes[i];
+            oldLvl.nodes[i] = oldLeaves[i];
+            newLvl.nodes[i] = newLeaves[i];
+            oldLvl.positions[i] = proof.leafIndexes[i];
+            newLvl.positions[i] = proof.leafIndexes[i];
         }
-        oldLevelPositions.currentNodesFreeSlot = leafCount;
-        newLevelPositions.currentNodesFreeSlot = leafCount;
+        oldLvlPos.currentNodesFreeSlot = leafCount;
+        newLvlPos.currentNodesFreeSlot = leafCount;
 
         for (uint256 level = 0; level < proof.treeDepth; ) {
-            oldLevelPositions.level = level;
-            newLevelPositions.level = level;
-            (oldLevelState, oldLevelPositions) = _hashMultiProofLevel(proof, oldLevelState, oldLevelPositions, hasher);
-            (newLevelState, newLevelPositions) = _hashMultiProofLevel(proof, newLevelState, newLevelPositions, hasher);
+            oldLvlPos.level = level;
+            newLvlPos.level = level;
+            (oldLvl, oldLvlPos) = _hashMultiProofLevel(proof, oldLvl, oldLvlPos, hasher);
+            (newLvl, newLvlPos) = _hashMultiProofLevel(proof, newLvl, newLvlPos, hasher);
 
-            if (newLevelPositions.isNewSideNode) {
-                self.sideNodes[level] = newLevelPositions.newSideNode;
+            if (newLvlPos.isNewSideNode) {
+                self.sideNodes[level] = newLvlPos.newSideNode;
             }
 
             unchecked {
@@ -934,20 +914,20 @@ library InternalSkinnyIMTCore {
         // Verify the old leaves against the current root BEFORE overwriting anything: _root(self) still
         // reads the old top slot here. The loop above only refreshed intermediate sideNodes (levels
         // < treeDepth); the top root slot is written below, once the proof is known good.
-        if (_root(self) != oldLevelState.nodes[0]) {
+        if (_root(self) != oldLvl.nodes[0]) {
             // TODO say wrong root instead? Also in _update?
             revert WrongMultiProof();
         }
 
         // all proof siblings need to be read and validated.
         // Very strict but now this function verifies leaves + indexes + proof siblings
-        if (oldLevelPositions.proofSiblingsReadPos != proof.proofSiblings.length) {
+        if (oldLvlPos.proofSiblingsReadPos != proof.proofSiblings.length) {
             revert WrongMultiProof();
         }
 
         // Store the new top root (mirrors _update's `self.sideNodes[treeDepth] = newNode`). An update
         // never changes depth, so proof.treeDepth == self.depth.
-        uint256 newRoot = newLevelState.nodes[0];
+        uint256 newRoot = newLvl.nodes[0];
         self.sideNodes[proof.treeDepth] = newRoot;
         return newRoot;
     }
@@ -1057,41 +1037,41 @@ library InternalSkinnyIMTCore {
 
 // function _hashProofLevel(
 //     uint256 node,
-//     ProofLevelPositions memory levelPos,
+//     ProofLevelPositions memory lvlPos,
 //     uint256[] calldata proofSiblings,
 //     function(uint256[2] memory) view returns (uint256) hasher
 // ) internal view returns (uint256, ProofLevelPositions memory) {
 //     // The sideNode at this level is the node at position nextInsertIndex - 1, and only when this level
 //     // is live (nextInsertIndex is odd). For a single-leaf update the one node we recompute (`node`, at
 //     // position nodeIndex) is that sideNode exactly when nodeIndex == nextInsertIndex - 1. Write the result
-//     // into the struct so the caller sees it; reset the flag each level since `levelPos` is reused.
-//     if (levelPos.nextInsertIndex & 1 == 1 && (levelPos.nextInsertIndex - 1) == levelPos.nodeIndex) {
-//         levelPos.newSideNode = node;
-//         levelPos.isNewSideNode = true;
+//     // into the struct so the caller sees it; reset the flag each level since `lvlPos` is reused.
+//     if (lvlPos.nextInsertIndex & 1 == 1 && (lvlPos.nextInsertIndex - 1) == lvlPos.nodeIndex) {
+//         lvlPos.newSideNode = node;
+//         lvlPos.isNewSideNode = true;
 //     } else {
-//         levelPos.isNewSideNode = false;
+//         lvlPos.isNewSideNode = false;
 //     }
-//     if (levelPos.nodeIndex & 1 == 1) {
-//         node = hasher([proofSiblings[levelPos.siblingIndex], node]);
+//     if (lvlPos.nodeIndex & 1 == 1) {
+//         node = hasher([proofSiblings[lvlPos.siblingIndex], node]);
 //         unchecked {
-//             ++levelPos.siblingIndex;
+//             ++lvlPos.siblingIndex;
 //         }
 //     } else {
 //         // make sure node index is not at the edge @TODO explain
-//         if (levelPos.nodeIndex != levelPos.edgeIndex) {
-//             node = hasher([node, proofSiblings[levelPos.siblingIndex]]);
+//         if (lvlPos.nodeIndex != lvlPos.edgeIndex) {
+//             node = hasher([node, proofSiblings[lvlPos.siblingIndex]]);
 
 //             unchecked {
-//                 ++levelPos.siblingIndex;
+//                 ++lvlPos.siblingIndex;
 //             }
 //         }
 //     }
 
-//     levelPos.nodeIndex >>= 1;
-//     levelPos.edgeIndex >>= 1;
-//     levelPos.nextInsertIndex >>= 1;
+//     lvlPos.nodeIndex >>= 1;
+//     lvlPos.edgeIndex >>= 1;
+//     lvlPos.nextInsertIndex >>= 1;
 
-//     return (node, levelPos);
+//     return (node, lvlPos);
 // }
 
 // /// @dev Hashes merkle proof and returns the root the leaf belongs to
@@ -1114,7 +1094,7 @@ library InternalSkinnyIMTCore {
 //     }
 
 //     uint256 node = leaf;
-//     ProofLevelPositions memory levelPos = ProofLevelPositions(
+//     ProofLevelPositions memory lvlPos = ProofLevelPositions(
 //         leafIndex, // nodeIndex
 //         // index of the very last leaf in the tree
 //         // tracking this index up the tree, follows the indexes of the nodes in self.sidNodes
@@ -1130,7 +1110,7 @@ library InternalSkinnyIMTCore {
 //     );
 //     for (uint256 level = 0; level < treeDepth; ) {
 //         // no need for sideNodes so trackSideNodes=false
-//         (node, levelPos) = _hashProofLevel(node, levelPos, proofSiblings, hasher);
+//         (node, lvlPos) = _hashProofLevel(node, lvlPos, proofSiblings, hasher);
 
 //         unchecked {
 //             ++level;
