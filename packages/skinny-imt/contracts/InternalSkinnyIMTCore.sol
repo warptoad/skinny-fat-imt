@@ -123,18 +123,31 @@ library InternalSkinnyIMTCore {
         return (node, index);
     }
 
-    // @TODO should also return start and endIndex, but stack limit is too close for that rn
+    /// @dev Per-level index/size trackers for `_insertMany`, bundled into one memory slot (one stack
+    /// slot instead of four) so the function can also return the start/next indexes without blowing
+    /// the 16-slot stack (no viaIR). Mutated in place as we climb: `currentLevel*` is the level being
+    /// consumed, `nextLevel*` the level being built.
+    struct InsertManyLevel {
+        uint256 currentLevelStartIndex; // first index to change at the current level
+        uint256 currentLevelSize; // number of nodes at the current level
+        uint256 nextLevelStartIndex; // first index to change at the next level
+        uint256 nextLevelSize; // number of nodes at the next level
+    }
+
     /// @dev Inserts many leaves into the incremental merkle tree.
     /// @notice Contracts using this function with snark based hash functions,
     // need to check that the leafs are within the snark scalar field.
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @param leaves: The values of the new leaves to be inserted into the tree.
-    /// @return The root after the leaves have been inserted.
+    /// @return root after the leaves have been inserted.
+    /// @return startIndex index of the first appended leaf (inclusive).
+    /// @return nextIndex index one past the last appended leaf (exclusive), matching
+    /// `_insertManyRepeated` and the Event layer.
     function _insertMany(
         SkinnyIMTData storage self,
         uint256[] calldata leaves,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal returns (uint256) {
+    ) internal returns (uint256, uint256, uint256) {
         if (_isInitialized(self) == false) {
             revert NotInitialized();
         }
@@ -157,40 +170,40 @@ library InternalSkinnyIMTCore {
         }
         self.depth = treeDepth;
 
-        // First index to change in every level.
-        uint256 currentLevelStartIndex = startIndex;
-
-        // Size of the level used to create the next level.
-        uint256 currentLevelSize = startIndex + leaves.length;
-
-        // The index where changes begin at the next level. currentLevelStartIndex / 2
-        uint256 nextLevelStartIndex = currentLevelStartIndex >> 1;
-
-        // The size of the next level. ((currentLevelSize - 1) / 2) + 1
-        uint256 nextLevelSize = ((currentLevelSize - 1) >> 1) + 1;
+        // The four per-level trackers, packed into one memory slot (see InsertManyLevel) so the
+        // frame has room for the two extra return values under the 16-slot stack limit (no viaIR).
+        // currentLevel* describe the leaves just appended; nextLevel* is the level being built.
+        InsertManyLevel memory lvl = InsertManyLevel({
+            currentLevelStartIndex: startIndex, // first index to change in every level
+            currentLevelSize: startIndex + leaves.length, // size of the level used to build the next
+            nextLevelStartIndex: startIndex >> 1, // currentLevelStartIndex / 2
+            nextLevelSize: ((startIndex + leaves.length - 1) >> 1) + 1 // ceil(currentLevelSize / 2)
+        });
 
         for (uint256 level = 0; level < treeDepth; ) {
             // The number of nodes for the new level that will be created,
             // only the new values, not the entire level.
-            // uint256 numberOfNewNodes = nextLevelSize - nextLevelStartIndex;
-            uint256[] memory nextLevelNewNodes = new uint256[](nextLevelSize - nextLevelStartIndex);
-            for (uint256 i = 0; i < nextLevelSize - nextLevelStartIndex; ) {
+            // uint256 numberOfNewNodes = lvl.nextLevelSize - lvl.nextLevelStartIndex;
+            uint256[] memory nextLevelNewNodes = new uint256[](lvl.nextLevelSize - lvl.nextLevelStartIndex);
+            for (uint256 i = 0; i < lvl.nextLevelSize - lvl.nextLevelStartIndex; ) {
                 // packing left and right node in one array saves on the stack size
                 uint256[2] memory hasherInput;
 
                 // Assign the left node using the saved path or the position in the array.
-                if (((i + nextLevelStartIndex) << 1) < currentLevelStartIndex) {
+                if (((i + lvl.nextLevelStartIndex) << 1) < lvl.currentLevelStartIndex) {
                     hasherInput[0] = self.sideNodes[level];
                 } else {
-                    hasherInput[0] = currentLevelNewNodes[((i + nextLevelStartIndex) << 1) - currentLevelStartIndex];
+                    hasherInput[0] = currentLevelNewNodes[
+                        ((i + lvl.nextLevelStartIndex) << 1) - lvl.currentLevelStartIndex
+                    ];
                 }
 
                 // Existence of a right child by checking index
                 // zero is a valid leaf now, so `rightChild == 0` can't be used as a proxy.
                 // If a right child exists: assign it and hash(left, right). Otherwise: parent = left.
-                if (((i + nextLevelStartIndex) << 1) + 1 < currentLevelSize) {
+                if (((i + lvl.nextLevelStartIndex) << 1) + 1 < lvl.currentLevelSize) {
                     hasherInput[1] = currentLevelNewNodes[
-                        ((i + nextLevelStartIndex) << 1) + 1 - currentLevelStartIndex
+                        ((i + lvl.nextLevelStartIndex) << 1) + 1 - lvl.currentLevelStartIndex
                     ];
                     // store as parent node for next round
                     nextLevelNewNodes[i] = hasher(hasherInput);
@@ -210,7 +223,7 @@ library InternalSkinnyIMTCore {
             // Update the `sideNodes` variable.
             // sideNodes are always at the edge of the tree, and are always the leftChild
             //
-            // If `currentLevelSize` is odd, the saved value will be the last value of the array
+            // If `lvl.currentLevelSize` is odd, the saved value will be the last value of the array
             // if it is even and there are more than 1 element in `currentLevelNewNodes`, the saved value
             // will be the value before the last one.
             // If it is even and there is only one element, there is no need to save anything because
@@ -220,30 +233,30 @@ library InternalSkinnyIMTCore {
             // before reading it, so the store would be dead. (Computed inline rather than
             // cached in a local — the surrounding function is at the 16-slot stack limit.)
             if (((startIndex + leaves.length) >> level) & 1 == 1) {
-                if (currentLevelSize & 1 == 1) {
-                    // currentLevelSize % 2 == 1, is odd
-                    // currentLevelSize = treeSize + leaves.length
-                    // currentLevelSize = (currentLevelSize - 1) / 2 + 1
+                if (lvl.currentLevelSize & 1 == 1) {
+                    // lvl.currentLevelSize % 2 == 1, is odd
+                    // lvl.currentLevelSize = treeSize + leaves.length
+                    // lvl.currentLevelSize = (lvl.currentLevelSize - 1) / 2 + 1
                     self.sideNodes[level] = currentLevelNewNodes[currentLevelNewNodes.length - 1];
                 } else if (currentLevelNewNodes.length > 1) {
                     self.sideNodes[level] = currentLevelNewNodes[currentLevelNewNodes.length - 2];
                 }
             }
 
-            currentLevelStartIndex = nextLevelStartIndex;
+            lvl.currentLevelStartIndex = lvl.nextLevelStartIndex;
 
             // Calculate the next level startIndex value.
             // It is the position of the parent node which is pos/2.
-            nextLevelStartIndex >>= 1;
+            lvl.nextLevelStartIndex >>= 1;
 
             // Update the next array that will be used to calculate the next level.
             currentLevelNewNodes = nextLevelNewNodes;
 
-            currentLevelSize = nextLevelSize;
+            lvl.currentLevelSize = lvl.nextLevelSize;
 
             // Calculate the size of the next level.
-            // The size of the next level is (currentLevelSize - 1) / 2 + 1.
-            nextLevelSize = ((nextLevelSize - 1) >> 1) + 1;
+            // The size of the next level is (lvl.currentLevelSize - 1) / 2 + 1.
+            lvl.nextLevelSize = ((lvl.nextLevelSize - 1) >> 1) + 1;
 
             unchecked {
                 ++level;
@@ -255,7 +268,7 @@ library InternalSkinnyIMTCore {
 
         self.sideNodes[treeDepth] = currentLevelNewNodes[0];
 
-        return currentLevelNewNodes[0];
+        return (currentLevelNewNodes[0], startIndex, startIndex + leaves.length);
     }
 
     /// @dev Returns `hasher(currentNode, currentNode)`, reading the cache when
@@ -303,22 +316,24 @@ library InternalSkinnyIMTCore {
     /// @param value: The leaf value to insert `amount` copies of.
     /// @param amount: The number of leaves to append.
     /// @return root after the leaves have been appended.
-    /// @return firstIndex index of the first appended leaf (inclusive).
-    /// @return lastIndex index of the last appended leaf (inclusive).
+    /// @return startIndex index of the first appended leaf (inclusive).
+    /// @return nextIndex The next index of the insert *after* this call.
+    /// Note: nextIndex is frequently used to derive the edgeIndex by doing `nextIndex-1`.
+    /// This to save space on the stack
     function _insertManyRepeated(
         SkinnyIMTData storage self,
         uint256 value,
         uint256 amount,
         function(uint256[2] memory) view returns (uint256) hasher
-    ) internal returns (uint256 root, uint256 firstIndex, uint256 lastIndex) {
+    ) internal returns (uint256 root, uint256 startIndex, uint256 nextIndex) {
         uint256 newTreeDepth = self.depth;
-        firstIndex = self.size;
+        startIndex = self.size;
         {
-            // `newSize` is only needed for depth growth and the size/lastIndex
-            // assignments; scoped to a block so its slot is released before
-            // the main loop (Solidity's 16-slot stack is tight here).
-            uint256 newSize = firstIndex + amount;
-            while (1 << newTreeDepth < newSize) {
+            // NOTE: named returns are avoided in this package (to prevent initialization footguns)
+            // but here it had to be used because the tight stack limit
+
+            nextIndex = startIndex + amount;
+            while (1 << newTreeDepth < nextIndex) {
                 unchecked {
                     ++newTreeDepth;
                 }
@@ -328,17 +343,16 @@ library InternalSkinnyIMTCore {
                 revert NotInitialized();
             }
             if (amount == 0) {
-                return (_root(self), firstIndex, firstIndex);
+                // nothing appended: the exclusive end is startIndex itself
+                return (_root(self), startIndex, startIndex);
             }
-            // after above no-op, to prevent underflow
-            lastIndex = newSize - 1;
             if (amount == 1) {
                 (root, ) = _insert(self, value, hasher);
-                return (root, firstIndex, lastIndex);
+                return (root, startIndex, nextIndex);
             }
 
             self.depth = newTreeDepth;
-            self.size = newSize;
+            self.size = nextIndex;
         }
 
         // Nodes at the edges of the insert, and the center where the node only contains zeros:
@@ -360,9 +374,10 @@ library InternalSkinnyIMTCore {
             uint256 newSideNode;
             {
                 // calculate the current index of the most left and right node of the insert
-                // by doing: index >> level (same as: index / 2^level)
-                uint256 rightEdgePosition = lastIndex >> level;
-                uint256 leftBoundaryPosition = firstIndex >> level;
+                // by doing: index >> level (same as: index / 2^level). (nextIndex - 1) is the
+                // inclusive last leaf index; see the return docs on why we keep only nextIndex.
+                uint256 rightEdgePosition = (nextIndex - 1) >> level;
+                uint256 leftBoundaryPosition = startIndex >> level;
 
                 // determine where the sideNode is at. Left,right, (somewhere) center of the inserted nodes or unchanged
                 // sideNode == rightEdgeNodeSibling (left sibling of rightEdge), unless dangles or if root
@@ -398,10 +413,13 @@ library InternalSkinnyIMTCore {
                 }
             }
 
-            // something happened, store it — but only at levels live for the new tree
-            // (set bits of newSize == lastIndex + 1). Dead levels are overwritten by the
-            // next insert before they're read, so refreshing them would be a wasted store.
-            if (newSideNode != oldSideNode && ((lastIndex + 1) >> level) & 1 == 1) {
+            // `newSideNode != oldSideNode`: skip obviously redundant writes
+            // `(nextIndex >> level) & 1 == 1`: check if the next insert (after this function is done)
+            // who needs a right sibling, but will not have that yet while inserting (after this function is done)
+            // so it has no right sibling, and instead takes a sideNode as it's *left* sibling to attach to the tree.
+            // only in that specific case is a sideNode read, so only then we write to it.
+            // @TODO put this explanation else where and refer to it any time `(nextIndex >> level) & 1 == 1` happens.
+            if (newSideNode != oldSideNode && (nextIndex >> level) & 1 == 1) {
                 self.sideNodes[level] = newSideNode;
             }
 
@@ -416,16 +434,16 @@ library InternalSkinnyIMTCore {
                 // oldSize / (2**level) % 2
                 {
                     // redoing calculation here because of stack limits
-                    // uint256 leftBoundaryPosition = firstIndex >> level; over stack limit again :/
-                    uint256 nextRightEdgePosition = lastIndex >> (level + 1);
-                    uint256 nextLeftEdgePosition = firstIndex >> (level + 1);
+                    // uint256 leftBoundaryPosition = startIndex >> level; over stack limit again :/
+                    uint256 nextRightEdgePosition = (nextIndex - 1) >> (level + 1);
+                    uint256 nextLeftEdgePosition = startIndex >> (level + 1);
 
                     // we can skip leftBoundaryNode if the next iter rightEdgeNode is at the same position
                     // at that point leftBoundaryNode does the same as rightEdgeNode,
                     // so no need to do things twice
                     if (nextLeftEdgePosition != nextRightEdgePosition) {
                         // if leftBoundaryPosition is right
-                        if ((firstIndex >> level) & 1 == 1) {
+                        if ((startIndex >> level) & 1 == 1) {
                             // if right use oldSideNode, since that is where these added nodes "attach" to the
                             // existing tree
                             if (leftBoundaryNode == repeatedCenterNode && oldSideNode == repeatedCenterNode) {
@@ -453,8 +471,8 @@ library InternalSkinnyIMTCore {
 
                 // ---- rightEdgeNode ---
                 // calculate index of the newSide node at this level and check if it's odd or even
-                // rightEdgePosition = (lastIndex / (2**level)) % 2
-                if ((lastIndex >> level) & 1 == 1) {
+                // rightEdgePosition =((nextIndex - 1) >> level)
+                if (((nextIndex - 1) >> level) & 1 == 1) {
                     // if odd rightEdgeNode has a sibling so we hash it right
                     if (newSideNode == rightEdgeNode) {
                         // we are doing hasher([rightEdgeNode, rightEdgeNode])
@@ -492,7 +510,7 @@ library InternalSkinnyIMTCore {
         // finally store the root!
         root = rightEdgeNode;
         self.sideNodes[newTreeDepth] = root;
-        return (root, firstIndex, lastIndex);
+        return (root, startIndex, nextIndex);
     }
 
     /// @dev Warms the `(value, level)` cache for levels 1..`upToLevel` so that

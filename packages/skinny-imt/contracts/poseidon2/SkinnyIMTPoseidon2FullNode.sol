@@ -8,22 +8,12 @@ import {InternalSkinnyIMTStorage, SkinnyIMTDataFullNode} from "../InternalSkinny
 library SkinnyIMTPoseidon2FullNode {
     using InternalSkinnyIMTStorage for *;
 
-    function hasher(uint256[2] memory leaves) public pure returns (uint256) {
+    function hasher(uint256[2] memory leaves) private pure returns (uint256) {
         return LibPoseidon2Yul.hash_2(leaves[0], leaves[1]);
     }
 
     function init(SkinnyIMTDataFullNode storage self) public returns (uint256) {
         return InternalSkinnyIMTStorage._init(self);
-    }
-
-    // Only the FullNode variant stores the `leaves` array, so this getter lives here (the non-full
-    // wrappers are event-only and have nothing to read).
-    function getLeaves(
-        SkinnyIMTDataFullNode storage self,
-        uint256 firstIndex,
-        uint256 endIndex
-    ) public view returns (uint256[] memory) {
-        return InternalSkinnyIMTStorage._getLeaves(self, firstIndex, endIndex);
     }
 
     function insert(SkinnyIMTDataFullNode storage self, uint256 leaf) public returns (uint256, uint256) {
@@ -53,10 +43,10 @@ library SkinnyIMTPoseidon2FullNode {
         SkinnyIMTDataFullNode storage self,
         uint256 oldLeaf,
         uint256 newLeaf,
-        uint256 index,
+        uint256 leafIndex,
         uint256[] calldata proofSiblings
     ) public returns (uint256) {
-        return InternalSkinnyIMTStorage._updateBN254(self, oldLeaf, newLeaf, index, proofSiblings, hasher);
+        return InternalSkinnyIMTStorage._updateBN254(self, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
     }
 
     function updateMany(

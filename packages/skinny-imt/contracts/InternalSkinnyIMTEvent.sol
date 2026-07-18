@@ -43,8 +43,12 @@ library InternalSkinnyIMTEvent {
         uint256[] calldata leaves,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
-        uint256 startIndex = self.size;
-        uint256 nextIndex = startIndex + leaves.length;
+        // update tree
+        (uint256 newRoot, uint256 startIndex, uint256 nextIndex) = InternalSkinnyIMTCore._insertMany(
+            self,
+            leaves,
+            hasher
+        );
 
         // emit events
         uint256 treeId = self.treeId;
@@ -56,9 +60,6 @@ library InternalSkinnyIMTEvent {
             }
         }
 
-        // update tree
-        uint256 newRoot = InternalSkinnyIMTCore._insertMany(self, leaves, hasher);
-
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -67,8 +68,12 @@ library InternalSkinnyIMTEvent {
         uint256[] calldata leaves,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
-        uint256 startIndex = self.size;
-        uint256 nextIndex = startIndex + leaves.length;
+        // update tree
+        (uint256 newRoot, uint256 startIndex, uint256 nextIndex) = InternalSkinnyIMTCore._insertMany(
+            self,
+            leaves,
+            hasher
+        );
 
         // emit events
         uint256 treeId = self.treeId;
@@ -81,9 +86,6 @@ library InternalSkinnyIMTEvent {
             }
         }
 
-        // update tree
-        uint256 newRoot = InternalSkinnyIMTCore._insertMany(self, leaves, hasher);
-
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -93,15 +95,14 @@ library InternalSkinnyIMTEvent {
         uint256 amount,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
-        // update tree
-        (uint256 newRoot, uint256 startIndex, ) = InternalSkinnyIMTCore._insertManyRepeated(
+        // update tree (Core returns the authoritative start/next indexes)
+        (uint256 newRoot, uint256 startIndex, uint256 nextIndex) = InternalSkinnyIMTCore._insertManyRepeated(
             self,
             value,
             amount,
             hasher
         );
         // emit event
-        uint256 nextIndex = startIndex + amount;
         emit RepeatedLeafs(self.treeId, startIndex, nextIndex, value);
         return (newRoot, startIndex, nextIndex);
     }
@@ -114,15 +115,14 @@ library InternalSkinnyIMTEvent {
     ) internal returns (uint256, uint256, uint256) {
         // check
         _requireInField(value);
-        // update tree
-        (uint256 newRoot, uint256 startIndex, ) = InternalSkinnyIMTCore._insertManyRepeated(
+        // update tree (Core returns the authoritative start/next indexes)
+        (uint256 newRoot, uint256 startIndex, uint256 nextIndex) = InternalSkinnyIMTCore._insertManyRepeated(
             self,
             value,
             amount,
             hasher
         );
         // emit event
-        uint256 nextIndex = startIndex + amount;
         emit RepeatedLeafs(self.treeId, startIndex, nextIndex, value);
         return (newRoot, startIndex, nextIndex);
     }
@@ -153,14 +153,14 @@ library InternalSkinnyIMTEvent {
         SkinnyIMTData storage self,
         uint256 oldLeaf,
         uint256 newLeaf,
-        uint256 index,
+        uint256 leafIndex,
         uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
         // update tree
-        uint256 newRoot = InternalSkinnyIMTCore._update(self, oldLeaf, newLeaf, index, proofSiblings, hasher);
+        uint256 newRoot = InternalSkinnyIMTCore._update(self, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
         // emit event
-        emit UpdatedLeaf(self.treeId, index, newLeaf, oldLeaf);
+        emit UpdatedLeaf(self.treeId, leafIndex, newLeaf, oldLeaf);
         return newRoot;
     }
 
@@ -168,7 +168,7 @@ library InternalSkinnyIMTEvent {
         SkinnyIMTData storage self,
         uint256 oldLeaf,
         uint256 newLeaf,
-        uint256 index,
+        uint256 leafIndex,
         uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
@@ -176,9 +176,9 @@ library InternalSkinnyIMTEvent {
         _requireInField(newLeaf);
         _requireAllInField(proofSiblings);
         // update tree
-        uint256 newRoot = InternalSkinnyIMTCore._update(self, oldLeaf, newLeaf, index, proofSiblings, hasher);
+        uint256 newRoot = InternalSkinnyIMTCore._update(self, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
         // emit event
-        emit UpdatedLeaf(self.treeId, index, newLeaf, oldLeaf);
+        emit UpdatedLeaf(self.treeId, leafIndex, newLeaf, oldLeaf);
         return newRoot;
     }
 
@@ -263,29 +263,37 @@ library InternalSkinnyIMTEvent {
 
     function _proofManyToRoot(
         uint256 treeDepth,
-        uint256 edgeIndex,
+        uint256 treeSize,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal view returns (uint256) {
+        // takes treeSize (not edgeIndex) to match _proofToRoot; the core wants edgeIndex == treeSize - 1
+        if (treeSize == 0) {
+            revert TreeEmpty();
+        }
         // verify
         return
             InternalSkinnyIMTCore._proofManyToRoot(
                 leaves,
-                MultiProof(treeDepth, edgeIndex, leafIndexes, proofSiblings),
+                MultiProof(treeDepth, treeSize - 1, leafIndexes, proofSiblings),
                 hasher
             );
     }
 
     function _proofManyToRootBN254(
         uint256 treeDepth,
-        uint256 edgeIndex,
+        uint256 treeSize,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal view returns (uint256) {
+        // takes treeSize (not edgeIndex) to match _proofToRoot; the core wants edgeIndex == treeSize - 1
+        if (treeSize == 0) {
+            revert TreeEmpty();
+        }
         // check
         _requireAllInField(leaves);
         _requireAllInField(proofSiblings);
@@ -293,7 +301,7 @@ library InternalSkinnyIMTEvent {
         return
             InternalSkinnyIMTCore._proofManyToRoot(
                 leaves,
-                MultiProof(treeDepth, edgeIndex, leafIndexes, proofSiblings),
+                MultiProof(treeDepth, treeSize - 1, leafIndexes, proofSiblings),
                 hasher
             );
     }

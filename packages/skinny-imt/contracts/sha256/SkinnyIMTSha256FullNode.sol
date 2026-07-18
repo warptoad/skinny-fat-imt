@@ -9,22 +9,14 @@ library SkinnyIMTSha256FullNode {
     // sha256 is a built-in precompile (address 0x02); no external deployment needed.
     // Uses the non-field-checked (non-BN254) variants: sha256 outputs span the full uint256
     // range, so leaves and siblings are never required to be in the snark field.
-    function hasher(uint256[2] memory input) internal pure returns (uint256) {
+    // Kept private: only used internally as a function pointer (inlining is the optimal call path).
+    // getLeaves is intentionally NOT exposed here; inherit SkinnyIMTFullNodeReadable for that.
+    function hasher(uint256[2] memory input) private pure returns (uint256) {
         return uint256(sha256(abi.encodePacked(input[0], input[1])));
     }
 
     function init(SkinnyIMTDataFullNode storage self) public returns (uint256) {
         return InternalSkinnyIMTStorage._init(self);
-    }
-
-    // Only the FullNode variant stores the `leaves` array, so this getter lives here (the non-full
-    // wrappers are event-only and have nothing to read).
-    function getLeaves(
-        SkinnyIMTDataFullNode storage self,
-        uint256 firstIndex,
-        uint256 endIndex
-    ) public view returns (uint256[] memory) {
-        return InternalSkinnyIMTStorage._getLeaves(self, firstIndex, endIndex);
     }
 
     function insert(SkinnyIMTDataFullNode storage self, uint256 leaf) public returns (uint256, uint256) {
@@ -54,10 +46,10 @@ library SkinnyIMTSha256FullNode {
         SkinnyIMTDataFullNode storage self,
         uint256 oldLeaf,
         uint256 newLeaf,
-        uint256 index,
+        uint256 leafIndex,
         uint256[] calldata proofSiblings
     ) public returns (uint256) {
-        return InternalSkinnyIMTStorage._update(self, oldLeaf, newLeaf, index, proofSiblings, hasher);
+        return InternalSkinnyIMTStorage._update(self, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
     }
 
     function updateMany(

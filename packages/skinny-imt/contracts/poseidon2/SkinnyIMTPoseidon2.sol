@@ -9,7 +9,7 @@ import {SkinnyIMTData} from "../InternalSkinnyIMTCore.sol";
 library SkinnyIMTPoseidon2 {
     using InternalSkinnyIMTEvent for *;
 
-    function hasher(uint256[2] memory leaves) public pure returns (uint256) {
+    function hasher(uint256[2] memory leaves) private pure returns (uint256) {
         return LibPoseidon2Yul.hash_2(leaves[0], leaves[1]);
     }
 
@@ -44,10 +44,10 @@ library SkinnyIMTPoseidon2 {
         SkinnyIMTData storage self,
         uint256 oldLeaf,
         uint256 newLeaf,
-        uint256 index,
+        uint256 leafIndex,
         uint256[] calldata proofSiblings
     ) public returns (uint256) {
-        return InternalSkinnyIMTEvent._updateBN254(self, oldLeaf, newLeaf, index, proofSiblings, hasher);
+        return InternalSkinnyIMTEvent._updateBN254(self, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
     }
 
     function updateMany(

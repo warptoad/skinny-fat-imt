@@ -35,7 +35,7 @@ library SkinnyIMTPoseidon2Verify {
 
     function proofManyToRootBN254(
         uint256 treeDepth,
-        uint256 edgeIndex,
+        uint256 treeSize,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
@@ -43,7 +43,7 @@ library SkinnyIMTPoseidon2Verify {
         return
             InternalSkinnyIMTEvent._proofManyToRootBN254(
                 treeDepth,
-                edgeIndex,
+                treeSize,
                 leaves,
                 leafIndexes,
                 proofSiblings,
@@ -81,10 +81,9 @@ library SkinnyIMTPoseidon2Verify {
         if (self.size == 0) {
             revert TreeEmpty();
         }
-        uint256 edgeIndex = self.size - 1;
         uint256 provenRoot = InternalSkinnyIMTEvent._proofManyToRootBN254(
             self.depth,
-            edgeIndex,
+            self.size,
             leaves,
             leafIndexes,
             proofSiblings,

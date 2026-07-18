@@ -15,7 +15,7 @@ import {TreeEmpty} from "../InternalSkinnyIMTCore.sol";
 library SkinnyIMTSha256Verify {
     using InternalSkinnyIMTEvent for *;
 
-    function hasher(uint256[2] memory input) internal pure returns (uint256) {
+    function hasher(uint256[2] memory input) public pure returns (uint256) {
         return uint256(sha256(abi.encodePacked(input[0], input[1])));
     }
 
@@ -35,13 +35,12 @@ library SkinnyIMTSha256Verify {
 
     function proofManyToRoot(
         uint256 treeDepth,
-        uint256 edgeIndex,
+        uint256 treeSize,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
     ) public view returns (uint256) {
-        return
-            InternalSkinnyIMTEvent._proofManyToRoot(treeDepth, edgeIndex, leaves, leafIndexes, proofSiblings, hasher);
+        return InternalSkinnyIMTEvent._proofManyToRoot(treeDepth, treeSize, leaves, leafIndexes, proofSiblings, hasher);
     }
 
     function verify(
@@ -74,10 +73,9 @@ library SkinnyIMTSha256Verify {
         if (self.size == 0) {
             revert TreeEmpty();
         }
-        uint256 edgeIndex = self.size - 1;
         uint256 provenRoot = InternalSkinnyIMTEvent._proofManyToRoot(
             self.depth,
-            edgeIndex,
+            self.size,
             leaves,
             leafIndexes,
             proofSiblings,

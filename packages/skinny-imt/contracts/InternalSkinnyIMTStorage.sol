@@ -126,24 +126,24 @@ library InternalSkinnyIMTStorage {
         SkinnyIMTDataFullNode storage self,
         uint256 oldLeaf,
         uint256 newLeaf,
-        uint256 index,
+        uint256 leafIndex,
         uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
-        self.leaves[index] = newLeaf;
-        return InternalSkinnyIMTEvent._update(self.skinnyData, oldLeaf, newLeaf, index, proofSiblings, hasher);
+        self.leaves[leafIndex] = newLeaf;
+        return InternalSkinnyIMTEvent._update(self.skinnyData, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
     }
 
     function _updateBN254(
         SkinnyIMTDataFullNode storage self,
         uint256 oldLeaf,
         uint256 newLeaf,
-        uint256 index,
+        uint256 leafIndex,
         uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
-        self.leaves[index] = newLeaf;
-        return InternalSkinnyIMTEvent._updateBN254(self.skinnyData, oldLeaf, newLeaf, index, proofSiblings, hasher);
+        self.leaves[leafIndex] = newLeaf;
+        return InternalSkinnyIMTEvent._updateBN254(self.skinnyData, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
     }
 
     function _updateMany(
