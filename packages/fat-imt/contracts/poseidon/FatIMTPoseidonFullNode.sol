@@ -6,8 +6,6 @@ import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
 import {InternalFatIMTStorage, FatIMTDataFullNode} from "../InternalFatIMTStorage.sol";
 
 library FatIMTPoseidonFullNode {
-    using InternalFatIMTStorage for *;
-
     function hasher(uint256[2] memory input) internal pure returns (uint256) {
         return PoseidonT3.hash(input);
     }

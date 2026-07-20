@@ -7,8 +7,6 @@ import {InternalFatIMTEvent} from "../InternalFatIMTEvent.sol";
 import {FatIMTData} from "../InternalFatIMTCore.sol";
 
 library FatIMTPoseidon2 {
-    using InternalFatIMTEvent for *;
-
     function hasher(uint256[2] memory leaves) public pure returns (uint256) {
         return LibPoseidon2Yul.hash_2(leaves[0], leaves[1]);
     }
