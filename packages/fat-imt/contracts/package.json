@@ -1,5 +1,5 @@
 {
-    "name": "@zk-kit/skinny-imt.sol",
+    "name": "@zk-kit/fat-imt.sol",
     "version": "2.0.1",
     "description": "Incremental Merkle tree implementations in Solidity.",
     "license": "MIT",
@@ -20,7 +20,7 @@
         "incremental-merkle-tree"
     ],
     "repository": "git@github.com:privacy-scaling-explorations/zk-kit.solidity.git",
-    "homepage": "https://github.com/privacy-scaling-explorations/zk-kit.solidity/tree/main/packages/skinny-imt",
+    "homepage": "https://github.com/privacy-scaling-explorations/zk-kit.solidity/tree/main/packages/fat-imt",
     "publishConfig": {
         "access": "public"
     },

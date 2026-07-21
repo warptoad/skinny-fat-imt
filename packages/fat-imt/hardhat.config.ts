@@ -27,7 +27,7 @@ const hardhatConfig: HardhatUserConfig = {
     gasReporter: {
         currency: "USD",
         enabled: process.env.REPORT_GAS === "true",
-        outputJSONFile: "gas-report-skinnyimt.json",
+        outputJSONFile: "gas-report-fatimt.json",
         outputJSON: process.env.REPORT_GAS_OUTPUT_JSON === "true"
     },
     typechain: {

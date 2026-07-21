@@ -1,5 +1,5 @@
 {
-    "name": "skinny-imt.sol",
+    "name": "fat-imt.sol",
     "private": true,
     "scripts": {
         "start": "hardhat node",
