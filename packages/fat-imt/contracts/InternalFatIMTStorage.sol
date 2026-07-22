@@ -13,8 +13,6 @@ struct FatIMTDataFullNode {
 }
 
 library InternalFatIMTStorage {
-    using InternalFatIMTStorage for *;
-
     /// helper function for clients that don't have debug_storageRangeAt
     /// @param self: A storage reference to the 'FatIMTDataFullNode' struct.
     /// @param firstIndex: first leaf index to get (inclusive)

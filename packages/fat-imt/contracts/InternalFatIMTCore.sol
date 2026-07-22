@@ -396,7 +396,7 @@ library InternalFatIMTCore {
         // and derive the inclusive last index inline as `(nextIndex - 1)` to occupy one less slot.
         {
             nextIndex = startIndex + amount;
-            while (2 ** newTreeDepth < nextIndex) {
+            while (1 << newTreeDepth < nextIndex) {
                 unchecked {
                     ++newTreeDepth;
                 }

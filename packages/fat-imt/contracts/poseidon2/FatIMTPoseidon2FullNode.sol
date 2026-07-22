@@ -6,8 +6,6 @@ import {LibPoseidon2Yul} from "poseidon2-evm/src/bn254/yul/LibPoseidon2Yul.sol";
 import {InternalFatIMTStorage, FatIMTDataFullNode} from "../InternalFatIMTStorage.sol";
 
 library FatIMTPoseidon2FullNode {
-    using InternalFatIMTStorage for *;
-
     function hasher(uint256[2] memory leaves) public pure returns (uint256) {
         return LibPoseidon2Yul.hash_2(leaves[0], leaves[1]);
     }

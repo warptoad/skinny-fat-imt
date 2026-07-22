@@ -13,8 +13,6 @@ import {TreeEmpty} from "../InternalFatIMTCore.sol";
 /// EIP-170 contract size limit. Both functions take the whole proof as parameters and touch no
 /// storage, so a single library serves the plain and full-node trees alike.
 library FatIMTPoseidonVerify {
-    using InternalFatIMTEvent for *;
-
     function hasher(uint256[2] memory input) internal pure returns (uint256) {
         return PoseidonT3.hash(input);
     }

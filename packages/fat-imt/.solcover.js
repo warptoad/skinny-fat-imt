@@ -1,3 +1,3 @@
 module.exports = {
-    istanbulFolder: "../../coverage/skinny-imt"
+    istanbulFolder: "../../coverage/fat-imt"
 }
