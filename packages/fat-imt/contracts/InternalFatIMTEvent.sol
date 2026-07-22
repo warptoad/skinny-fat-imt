@@ -7,12 +7,29 @@ import {_emitUpdatedMany, _requireInField, _requireAllInField} from "./FatIMTUti
 
 error EndIndexOutOfRange();
 error LevelOutOfRange();
+error NotInitialized();
+error AlreadyInitialized();
 
 library InternalFatIMTEvent {
+    /// @dev Checks whether the tree has been initialized.
+    function _isInitialized(FatIMTData storage self) internal view returns (bool) {
+        return self.treeId != 0;
+    }
+
+    /// @dev Initializes the tree by assigning it a non-zero `treeId` derived from its storage slot.
+    /// `self.treeId` stores `self.slot + 1` so upgradeable contracts that move the slot keep their id.
     function _init(FatIMTData storage self) internal returns (uint256) {
-        uint256 treeId = InternalFatIMTCore._init(self);
-        emit NewTree(treeId);
-        return treeId;
+        if (_isInitialized(self)) {
+            revert AlreadyInitialized();
+        }
+        uint256 slot;
+        assembly {
+            slot := self.slot
+        }
+        uint256 id = slot + 1;
+        self.treeId = id;
+        emit NewTree(id);
+        return id;
     }
 
     /// helper function for clients to retrieve nodes in a batch
@@ -50,7 +67,11 @@ library InternalFatIMTEvent {
         // update tree
         (uint256 newRoot, uint256 index) = InternalFatIMTCore._insert(self, leaf, hasher);
         // emit event
-        emit NewLeaf(self.treeId, index, leaf);
+        uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
+        emit NewLeaf(treeId, index, leaf);
         return (newRoot, index);
     }
 
@@ -64,7 +85,11 @@ library InternalFatIMTEvent {
         // update tree
         (uint256 newRoot, uint256 index) = InternalFatIMTCore._insert(self, leaf, hasher);
         // emit event
-        emit NewLeaf(self.treeId, index, leaf);
+        uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
+        emit NewLeaf(treeId, index, leaf);
         return (newRoot, index);
     }
 
@@ -78,6 +103,9 @@ library InternalFatIMTEvent {
 
         // emit events
         uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
         for (uint256 i = 0; i < leaves.length; ) {
             emit NewLeaf(treeId, startIndex + i, leaves[i]);
             unchecked {
@@ -101,6 +129,9 @@ library InternalFatIMTEvent {
 
         // emit events
         uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
         for (uint256 i = 0; i < leaves.length; ) {
             emit NewLeaf(treeId, startIndex + i, leaves[i]);
             unchecked {
@@ -127,6 +158,9 @@ library InternalFatIMTEvent {
         // emit events. fat-imt stores every node anyway, so a NewLeaf per leaf costs it nothing extra.
         // (skinny keeps only RepeatedLeafs here, since there per-leaf events would wreck its scaling.)
         uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
         for (uint256 i = 0; i < amount; ) {
             emit NewLeaf(treeId, startIndex + i, value);
             unchecked {
@@ -155,6 +189,9 @@ library InternalFatIMTEvent {
         // emit events. fat-imt stores every node anyway, so a NewLeaf per leaf costs it nothing extra.
         // (skinny keeps only RepeatedLeafs here, since there per-leaf events would wreck its scaling.)
         uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
         for (uint256 i = 0; i < amount; ) {
             emit NewLeaf(treeId, startIndex + i, value);
             unchecked {
@@ -171,6 +208,10 @@ library InternalFatIMTEvent {
         uint256 upToLevel,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal {
+        // precompute emits no event, so it never reads treeId; guard init explicitly (rare op)
+        if (self.treeId == 0) {
+            revert NotInitialized();
+        }
         // update cache
         InternalFatIMTCore._precomputeRepeatedCache(self, value, upToLevel, hasher);
     }
@@ -181,6 +222,10 @@ library InternalFatIMTEvent {
         uint256 upToLevel,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal {
+        // precompute emits no event, so it never reads treeId; guard init explicitly (rare op)
+        if (self.treeId == 0) {
+            revert NotInitialized();
+        }
         // check
         _requireInField(value);
         // update cache
@@ -196,7 +241,11 @@ library InternalFatIMTEvent {
         // update tree
         (uint256 newRoot, uint256 oldLeaf) = InternalFatIMTCore._update(self, newLeaf, leafIndex, hasher);
         // emit event
-        emit UpdatedLeaf(self.treeId, leafIndex, newLeaf, oldLeaf);
+        uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
+        emit UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
         return (newRoot, oldLeaf);
     }
 
@@ -211,7 +260,11 @@ library InternalFatIMTEvent {
         // update tree
         (uint256 newRoot, uint256 oldLeaf) = InternalFatIMTCore._update(self, newLeaf, leafIndex, hasher);
         // emit event
-        emit UpdatedLeaf(self.treeId, leafIndex, newLeaf, oldLeaf);
+        uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
+        emit UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
         return (newRoot, oldLeaf);
     }
 
@@ -234,6 +287,7 @@ library InternalFatIMTEvent {
             hasher
         );
         // emit event
+        // no tree.id == 0 check here, self.size == 0 already does that, also stack limit is too tight
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
         return (newRoot, oldLeaves);
     }
@@ -258,6 +312,7 @@ library InternalFatIMTEvent {
             hasher
         );
         // emit event
+        // no tree.id == 0 check here, self.size == 0 already does that, also stack limit is too tight
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
         return (newRoot, oldLeaves);
     }

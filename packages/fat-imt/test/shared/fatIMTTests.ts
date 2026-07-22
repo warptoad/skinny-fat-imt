@@ -1397,5 +1397,32 @@ export function runFatIMTTests(config: FatIMTTestConfig) {
                 }
             })
         })
+
+        // Matched batch-op benchmarks, mirrored by the LeanIMT stand-ins, so updateMany /
+        // insertManyRepeated can be compared per scenario. Gas is captured from the receipt
+        // (tagged `BENCH ...`) so the exact matched call is unambiguous in the logs.
+        describe("# batch-op benchmarks (matched)", () => {
+            it("insertManyRepeated: 128 in one call", async () => {
+                const tx = await fatIMTTest.insertManyRepeated(7, 128)
+                const receipt = await tx.wait()
+                // eslint-disable-next-line no-console
+                console.log(`BENCH insertManyRepeated128 ${receipt.gasUsed}`)
+            })
+
+            it("updateMany: all 8 leaves in a size-8 tree", async () => {
+                const elems = new Array(8).fill(0).map((_, i) => BigInt(i + 1))
+                jsLeanIMT.insertMany(elems)
+                await fatIMTTest.insertMany(elems)
+
+                const all = new Array(8).fill(0).map((_, i) => i)
+                const { leafIndexes } = generateMultiProof(jsLeanIMT, all)
+                const newLeaves = leafIndexes.map((idx) => BigInt(5000 + idx))
+
+                const tx = await fatIMTTest.updateMany(newLeaves, leafIndexes)
+                const receipt = await tx.wait()
+                // eslint-disable-next-line no-console
+                console.log(`BENCH updateMany8 ${receipt.gasUsed}`)
+            })
+        })
     })
 }

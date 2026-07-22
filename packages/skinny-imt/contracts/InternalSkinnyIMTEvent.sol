@@ -5,11 +5,33 @@ import {InternalSkinnyIMTCore, SkinnyIMTData, MultiProof, TreeEmpty} from "./Int
 import {NewTree, NewLeaf, RepeatedLeafs, UpdatedLeaf} from "./interfaces/events.sol";
 import {_emitUpdatedMany, _requireInField, _requireAllInField} from "./SkinnyIMTUtils.sol";
 
+error NotInitialized();
+error AlreadyInitialized();
+
 library InternalSkinnyIMTEvent {
+    /// @dev Checks whether the tree has been initialized.
+    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+    /// @return True if the tree has been initialized, false otherwise.
+    function _isInitialized(SkinnyIMTData storage self) internal view returns (bool) {
+        return self.treeId != 0;
+    }
+
+    /// @dev Initializes the tree by assigning it a non-zero `treeId` derived from its storage slot.
+    /// Reverts if the tree has already been initialized.
+    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
+    /// @return The newly assigned tree id.
     function _init(SkinnyIMTData storage self) internal returns (uint256) {
-        uint256 treeId = InternalSkinnyIMTCore._init(self);
-        emit NewTree(treeId);
-        return treeId;
+        if (_isInitialized(self)) {
+            revert AlreadyInitialized();
+        }
+        uint256 slot;
+        assembly {
+            slot := self.slot
+        }
+        uint256 id = slot + 1;
+        self.treeId = id;
+        emit NewTree(id);
+        return id;
     }
 
     function _insert(
@@ -20,7 +42,11 @@ library InternalSkinnyIMTEvent {
         // update tree
         (uint256 newRoot, uint256 index) = InternalSkinnyIMTCore._insert(self, leaf, hasher);
         // emit event
-        emit NewLeaf(self.treeId, index, leaf);
+        uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
+        emit NewLeaf(treeId, index, leaf);
         return (newRoot, index);
     }
 
@@ -34,7 +60,11 @@ library InternalSkinnyIMTEvent {
         // update tree
         (uint256 newRoot, uint256 index) = InternalSkinnyIMTCore._insert(self, leaf, hasher);
         // emit event
-        emit NewLeaf(self.treeId, index, leaf);
+        uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
+        emit NewLeaf(treeId, index, leaf);
         return (newRoot, index);
     }
 
@@ -52,6 +82,9 @@ library InternalSkinnyIMTEvent {
 
         // emit events
         uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
         for (uint256 i = 0; i < leaves.length; ) {
             uint256 leaf = leaves[i];
             emit NewLeaf(treeId, startIndex + i, leaf);
@@ -77,6 +110,9 @@ library InternalSkinnyIMTEvent {
 
         // emit events
         uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
         for (uint256 i = 0; i < leaves.length; ) {
             uint256 leaf = leaves[i];
             _requireInField(leaf);
@@ -103,7 +139,11 @@ library InternalSkinnyIMTEvent {
             hasher
         );
         // emit event
-        emit RepeatedLeafs(self.treeId, startIndex, nextIndex, value);
+        uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
+        emit RepeatedLeafs(treeId, startIndex, nextIndex, value);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -123,7 +163,11 @@ library InternalSkinnyIMTEvent {
             hasher
         );
         // emit event
-        emit RepeatedLeafs(self.treeId, startIndex, nextIndex, value);
+        uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
+        emit RepeatedLeafs(treeId, startIndex, nextIndex, value);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -133,6 +177,10 @@ library InternalSkinnyIMTEvent {
         uint256 upToLevel,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal {
+        // precompute emits no event, so it never reads treeId; guard init explicitly (rare op, cost irrelevant)
+        if (self.treeId == 0) {
+            revert NotInitialized();
+        }
         // update cache
         InternalSkinnyIMTCore._precomputeRepeatedCache(self, value, upToLevel, hasher);
     }
@@ -143,6 +191,10 @@ library InternalSkinnyIMTEvent {
         uint256 upToLevel,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal {
+        // precompute emits no event, so it never reads treeId; guard init explicitly (rare op, cost irrelevant)
+        if (self.treeId == 0) {
+            revert NotInitialized();
+        }
         // check
         _requireInField(value);
         // update cache
@@ -160,7 +212,11 @@ library InternalSkinnyIMTEvent {
         // update tree
         uint256 newRoot = InternalSkinnyIMTCore._update(self, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
         // emit event
-        emit UpdatedLeaf(self.treeId, leafIndex, newLeaf, oldLeaf);
+        uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
+        emit UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
         return newRoot;
     }
 
@@ -178,7 +234,11 @@ library InternalSkinnyIMTEvent {
         // update tree
         uint256 newRoot = InternalSkinnyIMTCore._update(self, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
         // emit event
-        emit UpdatedLeaf(self.treeId, leafIndex, newLeaf, oldLeaf);
+        uint256 treeId = self.treeId;
+        if (treeId == 0) {
+            revert NotInitialized();
+        }
+        emit UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
         return newRoot;
     }
 
@@ -201,6 +261,7 @@ library InternalSkinnyIMTEvent {
         MultiProof memory proof = MultiProof(self.depth, self.size - 1, leafIndexes, proofSiblings);
         uint256 newRoot = InternalSkinnyIMTCore._updateMany(self, oldLeaves, newLeaves, proof, hasher);
         // emit event
+        // no tree.id == 0 check here, self.size == 0 already does that, also stack limit is too tight
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
         return newRoot;
     }
@@ -226,6 +287,7 @@ library InternalSkinnyIMTEvent {
         MultiProof memory proof = MultiProof(self.depth, self.size - 1, leafIndexes, proofSiblings);
         uint256 newRoot = InternalSkinnyIMTCore._updateMany(self, oldLeaves, newLeaves, proof, hasher);
         // emit event
+        // no tree.id == 0 check here, self.size == 0 already does that, also stack limit is too tight
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
         return newRoot;
     }

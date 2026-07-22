@@ -27,8 +27,6 @@ struct MultiProof {
 
 error WrongSiblingNodes();
 error LeafDoesNotExist();
-error NotInitialized();
-error AlreadyInitialized();
 error WrongMultiProof();
 error TreeEmpty();
 
@@ -40,32 +38,6 @@ error TreeEmpty();
 /// it is updated based on the number of leaves in the tree. This approach
 /// results in the calculation of significantly fewer hashes, making the tree more efficient.
 library InternalFatIMTCore {
-    /// @dev Checks whether the tree has been initialized.
-    /// @param self: A storage reference to the 'FatIMTData' struct.
-    /// @return True if initialized
-    function _isInitialized(FatIMTData storage self) internal view returns (bool) {
-        return self.treeId != 0;
-    }
-
-    /// @dev Initializes the tree by assigning it a non-zero `treeId` derived from its storage slot.
-    /// Reverts if the tree has already been initialized.
-    /// @notice `self.treeId` stores `self.slot + 1`, to prevent upgradable contracts
-    /// who might change the slot, from losing the original treeId
-    /// @param self: A storage reference to the 'FatIMTData' struct.
-    /// @return The newly assigned tree id.
-    function _init(FatIMTData storage self) internal returns (uint256) {
-        if (_isInitialized(self)) {
-            revert AlreadyInitialized();
-        }
-        uint256 slot;
-        assembly {
-            slot := self.slot
-        }
-        uint256 id = slot + 1;
-        self.treeId = id;
-        return id;
-    }
-
     /// @dev self.nodes getter (to stay under stack limit)
     function _getNode(FatIMTData storage self, uint256 index, uint256 level) internal view returns (uint256) {
         return self.nodes[level][index];
@@ -135,9 +107,7 @@ library InternalFatIMTCore {
         uint256 leaf,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256) {
-        if (_isInitialized(self) == false) {
-            revert NotInitialized();
-        }
+        // init check moved to the Event layer (folded into the treeId read the event already does)
         uint256 index = self.size;
 
         // Cache tree depth to optimize gas
@@ -219,9 +189,7 @@ library InternalFatIMTCore {
         uint256[] calldata leaves,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
-        if (_isInitialized(self) == false) {
-            revert NotInitialized();
-        }
+        // init check moved to the Event layer (folded into the treeId read the event already does)
         // cache treeSize (this is also the startIndex)
         uint256 startIndex = self.size;
 
@@ -402,9 +370,7 @@ library InternalFatIMTCore {
                 }
             }
 
-            if (_isInitialized(self) == false) {
-                revert NotInitialized();
-            }
+            // init check moved to the Event layer
             if (amount == 0) {
                 // nothing appended: the exclusive end is startIndex itself
                 return (_root(self), startIndex, startIndex);
@@ -599,9 +565,7 @@ library InternalFatIMTCore {
         uint256 upToLevel,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal {
-        if (_isInitialized(self) == false) {
-            revert NotInitialized();
-        }
+        // init check moved to the Event layer (folded into the treeId read the event already does)
         if (upToLevel == 0) {
             return;
         }
@@ -638,9 +602,7 @@ library InternalFatIMTCore {
         uint256 leafIndex,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256) {
-        if (_isInitialized(self) == false) {
-            revert NotInitialized();
-        }
+        // init check moved to the Event layer (folded into the treeId read the event already does)
         uint256 treeSize = self.size;
         if (leafIndex >= treeSize) {
             revert LeafDoesNotExist();
@@ -968,9 +930,7 @@ library InternalFatIMTCore {
         if (leafCount == 0 || leafCount != leafIndexes.length) {
             revert WrongMultiProof();
         }
-        if (_isInitialized(self) == false) {
-            revert NotInitialized();
-        }
+        // init check moved to the Event layer (folded into the treeId read the event already does)
 
         uint256 treeSize = self.size;
 

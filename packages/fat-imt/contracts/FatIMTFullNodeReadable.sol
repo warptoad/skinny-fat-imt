@@ -2,7 +2,7 @@
 pragma solidity ^0.8.4;
 
 import {InternalFatIMTStorage, FatIMTDataFullNode} from "./InternalFatIMTStorage.sol";
-import {NotInitialized} from "./InternalFatIMTCore.sol";
+import {NotInitialized} from "./InternalFatIMTEvent.sol";
 
 /// @title FatIMTFullNodeReadable
 /// @dev Optional base for a full-node consumer. Gives off-chain readers (RPC / `eth_call`) a stable
