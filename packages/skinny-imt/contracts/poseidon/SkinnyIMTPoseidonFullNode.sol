@@ -6,8 +6,6 @@ import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
 import {InternalSkinnyIMTStorage, SkinnyIMTDataFullNode} from "../InternalSkinnyIMTStorage.sol";
 
 library SkinnyIMTPoseidonFullNode {
-    using InternalSkinnyIMTStorage for *;
-
     // Kept private: the hasher is only used internally as a function pointer. The optimal call path is
     // inlined anyway, and a standalone hasher costs the same gas deployed separately — so no public entry.
     // getLeaves is intentionally NOT exposed here; inherit SkinnyIMTFullNodeReadable for that.

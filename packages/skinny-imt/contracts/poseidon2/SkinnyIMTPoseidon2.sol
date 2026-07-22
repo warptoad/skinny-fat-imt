@@ -7,8 +7,6 @@ import {InternalSkinnyIMTEvent} from "../InternalSkinnyIMTEvent.sol";
 import {SkinnyIMTData} from "../InternalSkinnyIMTCore.sol";
 
 library SkinnyIMTPoseidon2 {
-    using InternalSkinnyIMTEvent for *;
-
     function hasher(uint256[2] memory leaves) private pure returns (uint256) {
         return LibPoseidon2Yul.hash_2(leaves[0], leaves[1]);
     }
