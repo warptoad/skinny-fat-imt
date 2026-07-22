@@ -2,7 +2,7 @@
 pragma solidity ^0.8.4;
 
 import {InternalSkinnyIMTStorage, SkinnyIMTDataFullNode} from "./InternalSkinnyIMTStorage.sol";
-import {NotInitialized} from "./InternalSkinnyIMTCore.sol";
+import {NotInitialized} from "./InternalSkinnyIMTEvent.sol";
 
 /// @title SkinnyIMTFullNodeReadable
 /// @dev Optional base for a full-node consumer. Gives off-chain readers (RPC / `eth_call`) a stable

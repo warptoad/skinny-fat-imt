@@ -29,8 +29,6 @@ struct MultiProof {
 
 error WrongSiblingNodes();
 error LeafDoesNotExist();
-error NotInitialized();
-error AlreadyInitialized();
 error WrongMultiProof();
 error TreeEmpty();
 
@@ -42,30 +40,6 @@ error TreeEmpty();
 /// it is updated based on the number of leaves in the tree. This approach
 /// results in the calculation of significantly fewer hashes, making the tree more efficient.
 library InternalSkinnyIMTCore {
-    /// @dev Checks whether the tree has been initialized.
-    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
-    /// @return True if the tree has been initialized, false otherwise.
-    function _isInitialized(SkinnyIMTData storage self) internal view returns (bool) {
-        return self.treeId != 0;
-    }
-
-    /// @dev Initializes the tree by assigning it a non-zero `treeId` derived from its storage slot.
-    /// Reverts if the tree has already been initialized.
-    /// @param self: A storage reference to the 'SkinnyIMTData' struct.
-    /// @return The newly assigned tree id.
-    function _init(SkinnyIMTData storage self) internal returns (uint256) {
-        if (_isInitialized(self)) {
-            revert AlreadyInitialized();
-        }
-        uint256 slot;
-        assembly {
-            slot := self.slot
-        }
-        uint256 id = slot + 1;
-        self.treeId = id;
-        return id;
-    }
-
     /// @dev Inserts a new leaf into the incremental merkle tree.
     /// @notice Contracts using this function with snark based hash functions,
     // need to check that the leaf is within the snark scalar field.
@@ -77,9 +51,9 @@ library InternalSkinnyIMTCore {
         uint256 leaf,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256) {
-        if (_isInitialized(self) == false) {
-            revert NotInitialized();
-        }
+        // if (_isInitialized(self) == false) {
+        //     revert NotInitialized();
+        // }
         uint256 index = self.size;
 
         // Cache tree depth to optimize gas
@@ -148,9 +122,6 @@ library InternalSkinnyIMTCore {
         uint256[] calldata leaves,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
-        if (_isInitialized(self) == false) {
-            revert NotInitialized();
-        }
         // cache treeSize
         uint256 startIndex = self.size;
 
@@ -339,9 +310,6 @@ library InternalSkinnyIMTCore {
                 }
             }
 
-            if (_isInitialized(self) == false) {
-                revert NotInitialized();
-            }
             if (amount == 0) {
                 // nothing appended: the exclusive end is startIndex itself
                 return (_root(self), startIndex, startIndex);
@@ -529,9 +497,6 @@ library InternalSkinnyIMTCore {
         uint256 upToLevel,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal {
-        if (_isInitialized(self) == false) {
-            revert NotInitialized();
-        }
         if (upToLevel == 0) {
             return;
         }
@@ -569,9 +534,6 @@ library InternalSkinnyIMTCore {
         uint256[] calldata proofSiblings,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
-        if (_isInitialized(self) == false) {
-            revert NotInitialized();
-        }
         // Cache tree depth to optimize gas
         uint256 treeDepth = self.depth;
         if (proofSiblings.length > treeDepth) {
