@@ -5,8 +5,6 @@ import {InternalSkinnyIMTEvent} from "../InternalSkinnyIMTEvent.sol";
 import {SkinnyIMTData} from "../InternalSkinnyIMTCore.sol";
 
 library SkinnyIMTSha256 {
-    using InternalSkinnyIMTEvent for *;
-
     // sha256 is a built-in precompile (address 0x02); no external deployment needed.
     // These trees use the non-field-checked (non-BN254) variants: sha256 outputs span the
     // full uint256 range, so leaves and siblings are never required to be in the snark field.

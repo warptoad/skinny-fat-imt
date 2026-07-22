@@ -14,8 +14,6 @@ struct SkinnyIMTDataFullNode {
 }
 
 library InternalSkinnyIMTStorage {
-    using InternalSkinnyIMTEvent for *;
-
     /// helper function for clients that don't have debug_storageRangeAt
     /// @param self: A storage reference to the 'SkinnyIMTDataFullNode' struct.
     /// @param firstIndex: first leaf index to get (inclusive)
