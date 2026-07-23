@@ -1,11 +1,11 @@
 {
-    "name": "@zk-kit/skinny-imt.sol",
-    "version": "2.0.1",
-    "description": "Incremental Merkle tree implementations in Solidity.",
+    "name": "@warptoad/skinny-imt.sol",
+    "version": "0.0.1",
+    "description": "Skinny incremental Merkle tree implementation in Solidity.",
     "license": "MIT",
     "files": [
         "*.sol",
-        "!test/*",
+        "!**/test/**",
         "README.md",
         "LICENSE"
     ],
@@ -19,12 +19,14 @@
         "merkle-tree",
         "incremental-merkle-tree"
     ],
-    "repository": "git@github.com:privacy-scaling-explorations/zk-kit.solidity.git",
-    "homepage": "https://github.com/privacy-scaling-explorations/zk-kit.solidity/tree/main/packages/skinny-imt",
+    "repository": "git+https://github.com/warptoad/skinny-fat-imt.git",
+    "homepage": "https://github.com/warptoad/skinny-fat-imt/tree/main/packages/skinny-imt",
+    "bugs": "https://github.com/warptoad/skinny-fat-imt/issues",
     "publishConfig": {
         "access": "public"
     },
     "dependencies": {
-        "poseidon-solidity": "0.0.5"
+        "poseidon-solidity": "0.0.5",
+        "poseidon2-evm": "2.0.0"
     }
 }
