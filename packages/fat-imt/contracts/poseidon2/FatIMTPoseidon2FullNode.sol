@@ -14,7 +14,11 @@ library FatIMTPoseidon2FullNode {
         return InternalFatIMTStorage._init(self);
     }
 
-    // getNodes lives in FatIMTPoseidon2Verify (call it with `.skinnyData`) to keep this library under
+    function reset(FatIMTDataFullNode storage self) public {
+        InternalFatIMTStorage._reset(self);
+    }
+
+    // getNodes lives in FatIMTPoseidon2Verify (call it with `.treeData`) to keep this library under
     // the EIP-170 size limit. getLeaves stays here since it reads this tree's own `leaves` array.
     function getLeaves(
         FatIMTDataFullNode storage self,

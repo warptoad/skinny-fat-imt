@@ -15,6 +15,14 @@ const hardhatConfig: HardhatUserConfig = {
             }
         }
     },
+    networks: {
+        hardhat: {
+            // libraries are compiled with runs: 2**32-1 (min runtime gas), so some exceed the
+            // EIP-170 24576-byte limit. Allow deploying them on the test network for now; the size
+            // golfing is a follow-up.
+            allowUnlimitedContractSize: true
+        }
+    },
     gasReporter: {
         currency: "USD",
         enabled: process.env.REPORT_GAS === "true",

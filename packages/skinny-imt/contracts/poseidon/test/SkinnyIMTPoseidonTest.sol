@@ -18,6 +18,10 @@ contract SkinnyIMTPoseidonTest {
         SkinnyIMTPoseidon.init(data);
     }
 
+    function reset() external {
+        SkinnyIMTPoseidon.reset(data);
+    }
+
     function insert(uint256 leaf) external {
         SkinnyIMTPoseidon.insert(data, leaf);
     }

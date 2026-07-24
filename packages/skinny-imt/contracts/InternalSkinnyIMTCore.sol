@@ -40,6 +40,11 @@ error TreeEmpty();
 /// it is updated based on the number of leaves in the tree. This approach
 /// results in the calculation of significantly fewer hashes, making the tree more efficient.
 library InternalSkinnyIMTCore {
+    function _reset(SkinnyIMTData storage self) internal {
+        self.size = 0;
+        self.depth = 0;
+    }
+
     /// @dev Inserts a new leaf into the incremental merkle tree.
     /// @notice Contracts using this function with snark based hash functions,
     // need to check that the leaf is within the snark scalar field.

@@ -12,6 +12,10 @@ contract SkinnyIMTPoseidon2FullNodeTest {
         SkinnyIMTPoseidon2FullNode.init(data);
     }
 
+    function reset() external {
+        SkinnyIMTPoseidon2FullNode.reset(data);
+    }
+
     function insert(uint256 leaf) external {
         SkinnyIMTPoseidon2FullNode.insert(data, leaf);
     }
@@ -38,7 +42,7 @@ contract SkinnyIMTPoseidon2FullNodeTest {
     }
 
     function size() external view returns (uint256) {
-        return data.skinnyData.size;
+        return data.treeData.size;
     }
 
     function root() public view returns (uint256) {

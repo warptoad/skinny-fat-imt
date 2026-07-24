@@ -38,6 +38,11 @@ error TreeEmpty();
 /// it is updated based on the number of leaves in the tree. This approach
 /// results in the calculation of significantly fewer hashes, making the tree more efficient.
 library InternalFatIMTCore {
+    function _reset(FatIMTData storage self) internal {
+        self.size = 0;
+        self.depth = 0;
+    }
+
     /// @dev self.nodes getter (to stay under stack limit)
     function _getNode(FatIMTData storage self, uint256 index, uint256 level) internal view returns (uint256) {
         return self.nodes[level][index];

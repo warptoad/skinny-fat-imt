@@ -18,6 +18,10 @@ contract SkinnyIMTSha256Test {
         SkinnyIMTSha256.init(data);
     }
 
+    function reset() external {
+        SkinnyIMTSha256.reset(data);
+    }
+
     function insert(uint256 leaf) external {
         SkinnyIMTSha256.insert(data, leaf);
     }

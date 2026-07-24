@@ -10,10 +10,17 @@ struct SkinnyIMTDataFullNode {
     // arrays cost more but store in consecutive slots which allows for usage of debug_storageRangeAt
     // to read this extremely fast
     uint256[] leaves;
-    SkinnyIMTData skinnyData;
+    SkinnyIMTData treeData;
 }
 
 library InternalSkinnyIMTStorage {
+    function _reset(SkinnyIMTDataFullNode storage self) internal {
+        // the FullNode variant also stores leaves in a pushed array, so it must be cleared here;
+        // InternalSkinnyIMTEvent._reset only zeroes size/depth in the core.
+        delete self.leaves;
+        InternalSkinnyIMTEvent._reset(self.treeData);
+    }
+
     /// helper function for clients that don't have debug_storageRangeAt
     /// @param self: A storage reference to the 'SkinnyIMTDataFullNode' struct.
     /// @param firstIndex: first leaf index to get (inclusive)
@@ -31,7 +38,7 @@ library InternalSkinnyIMTStorage {
     }
 
     function _init(SkinnyIMTDataFullNode storage self) internal returns (uint256) {
-        return InternalSkinnyIMTEvent._init(self.skinnyData);
+        return InternalSkinnyIMTEvent._init(self.treeData);
     }
 
     function _insert(
@@ -40,7 +47,7 @@ library InternalSkinnyIMTStorage {
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256) {
         self.leaves.push(leaf);
-        return InternalSkinnyIMTEvent._insert(self.skinnyData, leaf, hasher);
+        return InternalSkinnyIMTEvent._insert(self.treeData, leaf, hasher);
     }
 
     function _insertBN254(
@@ -49,7 +56,7 @@ library InternalSkinnyIMTStorage {
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256) {
         self.leaves.push(leaf);
-        return InternalSkinnyIMTEvent._insertBN254(self.skinnyData, leaf, hasher);
+        return InternalSkinnyIMTEvent._insertBN254(self.treeData, leaf, hasher);
     }
 
     function _insertMany(
@@ -60,7 +67,7 @@ library InternalSkinnyIMTStorage {
         for (uint256 i = 0; i < leaves.length; i++) {
             self.leaves.push(leaves[i]);
         }
-        return InternalSkinnyIMTEvent._insertMany(self.skinnyData, leaves, hasher);
+        return InternalSkinnyIMTEvent._insertMany(self.treeData, leaves, hasher);
     }
 
     function _insertManyBN254(
@@ -71,7 +78,7 @@ library InternalSkinnyIMTStorage {
         for (uint256 i = 0; i < leaves.length; i++) {
             self.leaves.push(leaves[i]);
         }
-        return InternalSkinnyIMTEvent._insertManyBN254(self.skinnyData, leaves, hasher);
+        return InternalSkinnyIMTEvent._insertManyBN254(self.treeData, leaves, hasher);
     }
 
     function _insertManyRepeated(
@@ -80,12 +87,12 @@ library InternalSkinnyIMTStorage {
         uint256 amount,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
-        uint256 treeSize = self.skinnyData.size;
+        uint256 treeSize = self.treeData.size;
         for (uint256 i = 0; i < amount; i++) {
             self.leaves.push(value);
-            emit NewLeaf(self.skinnyData.treeId, treeSize + i, value);
+            emit NewLeaf(self.treeData.treeId, treeSize + i, value);
         }
-        return InternalSkinnyIMTEvent._insertManyRepeated(self.skinnyData, value, amount, hasher);
+        return InternalSkinnyIMTEvent._insertManyRepeated(self.treeData, value, amount, hasher);
     }
 
     function _insertManyRepeatedBN254(
@@ -94,12 +101,12 @@ library InternalSkinnyIMTStorage {
         uint256 amount,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
-        uint256 treeSize = self.skinnyData.size;
+        uint256 treeSize = self.treeData.size;
         for (uint256 i = 0; i < amount; i++) {
             self.leaves.push(value);
-            emit NewLeaf(self.skinnyData.treeId, treeSize + i, value);
+            emit NewLeaf(self.treeData.treeId, treeSize + i, value);
         }
-        return InternalSkinnyIMTEvent._insertManyRepeatedBN254(self.skinnyData, value, amount, hasher);
+        return InternalSkinnyIMTEvent._insertManyRepeatedBN254(self.treeData, value, amount, hasher);
     }
 
     function _precomputeRepeatedCache(
@@ -108,7 +115,7 @@ library InternalSkinnyIMTStorage {
         uint256 upToLevel,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal {
-        return InternalSkinnyIMTEvent._precomputeRepeatedCache(self.skinnyData, value, upToLevel, hasher);
+        return InternalSkinnyIMTEvent._precomputeRepeatedCache(self.treeData, value, upToLevel, hasher);
     }
 
     function _precomputeRepeatedCacheBN254(
@@ -117,7 +124,7 @@ library InternalSkinnyIMTStorage {
         uint256 upToLevel,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal {
-        return InternalSkinnyIMTEvent._precomputeRepeatedCacheBN254(self.skinnyData, value, upToLevel, hasher);
+        return InternalSkinnyIMTEvent._precomputeRepeatedCacheBN254(self.treeData, value, upToLevel, hasher);
     }
 
     function _update(
@@ -129,7 +136,7 @@ library InternalSkinnyIMTStorage {
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
         self.leaves[leafIndex] = newLeaf;
-        return InternalSkinnyIMTEvent._update(self.skinnyData, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
+        return InternalSkinnyIMTEvent._update(self.treeData, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
     }
 
     function _updateBN254(
@@ -141,7 +148,7 @@ library InternalSkinnyIMTStorage {
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256) {
         self.leaves[leafIndex] = newLeaf;
-        return InternalSkinnyIMTEvent._updateBN254(self.skinnyData, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
+        return InternalSkinnyIMTEvent._updateBN254(self.treeData, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
     }
 
     function _updateMany(
@@ -156,14 +163,7 @@ library InternalSkinnyIMTStorage {
             self.leaves[leafIndexes[i]] = newLeaves[i];
         }
         return
-            InternalSkinnyIMTEvent._updateMany(
-                self.skinnyData,
-                oldLeaves,
-                newLeaves,
-                leafIndexes,
-                proofSiblings,
-                hasher
-            );
+            InternalSkinnyIMTEvent._updateMany(self.treeData, oldLeaves, newLeaves, leafIndexes, proofSiblings, hasher);
     }
 
     function _updateManyBN254(
@@ -179,7 +179,7 @@ library InternalSkinnyIMTStorage {
         }
         return
             InternalSkinnyIMTEvent._updateManyBN254(
-                self.skinnyData,
+                self.treeData,
                 oldLeaves,
                 newLeaves,
                 leafIndexes,
@@ -189,7 +189,7 @@ library InternalSkinnyIMTStorage {
     }
 
     function _root(SkinnyIMTDataFullNode storage self) internal view returns (uint256) {
-        return InternalSkinnyIMTEvent._root(self.skinnyData);
+        return InternalSkinnyIMTEvent._root(self.treeData);
     }
 
     function _proofToRoot(

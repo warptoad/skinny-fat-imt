@@ -42,7 +42,7 @@ abstract contract FatIMTFullNodeReadable {
     /// so all three surface as the same error; there is no finer distinction available to detect.
     function _initializedTree(uint256 treeId) internal view returns (FatIMTDataFullNode storage) {
         FatIMTDataFullNode storage tree = _tree(treeId);
-        if (tree.skinnyData.treeId == 0) {
+        if (tree.treeData.treeId == 0) {
             revert NotInitialized();
         }
         return tree;

@@ -16,6 +16,10 @@ library SkinnyIMTSha256 {
         return InternalSkinnyIMTEvent._init(self);
     }
 
+    function reset(SkinnyIMTData storage self) public {
+        InternalSkinnyIMTEvent._reset(self);
+    }
+
     function insert(SkinnyIMTData storage self, uint256 leaf) public returns (uint256, uint256) {
         return InternalSkinnyIMTEvent._insert(self, leaf, hasher);
     }

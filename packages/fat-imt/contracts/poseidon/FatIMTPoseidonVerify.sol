@@ -22,7 +22,7 @@ library FatIMTPoseidonVerify {
     }
 
     /// @notice Batch node getter. Reads the `nodes` mapping, which lives in `FatIMTData` for both the
-    /// plain and full-node trees — a full-node caller passes its `.skinnyData`. Hosted here (rather
+    /// plain and full-node trees — a full-node caller passes its `.treeData`. Hosted here (rather
     /// than in the two wrapper libraries) to keep them under the EIP-170 size limit. set level 0 to
     /// get the leaves.
     function getNodes(

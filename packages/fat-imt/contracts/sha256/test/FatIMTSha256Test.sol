@@ -18,6 +18,10 @@ contract FatIMTSha256Test {
         FatIMTSha256.init(data);
     }
 
+    function reset() external {
+        FatIMTSha256.reset(data);
+    }
+
     function insert(uint256 leaf) external {
         FatIMTSha256.insert(data, leaf);
     }

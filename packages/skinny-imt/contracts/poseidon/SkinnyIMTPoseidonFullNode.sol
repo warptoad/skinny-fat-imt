@@ -17,6 +17,10 @@ library SkinnyIMTPoseidonFullNode {
         return InternalSkinnyIMTStorage._init(self);
     }
 
+    function reset(SkinnyIMTDataFullNode storage self) public {
+        InternalSkinnyIMTStorage._reset(self);
+    }
+
     function insert(SkinnyIMTDataFullNode storage self, uint256 leaf) public returns (uint256, uint256) {
         return InternalSkinnyIMTStorage._insertBN254(self, leaf, hasher);
     }

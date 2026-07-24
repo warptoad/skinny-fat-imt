@@ -2,7 +2,7 @@
 pragma solidity ^0.8.4;
 
 import {InternalFatIMTCore, FatIMTData, MultiProof, TreeEmpty} from "./InternalFatIMTCore.sol";
-import {NewTree, NewLeaf, RepeatedLeafs, UpdatedLeaf} from "./interfaces/events.sol";
+import {NewTree, NewRoot, NewLeaf, RepeatedLeafs, UpdatedLeaf} from "./interfaces/events.sol";
 import {_emitUpdatedMany, _requireInField, _requireAllInField} from "./FatIMTUtils.sol";
 
 error EndIndexOutOfRange();
@@ -11,6 +11,10 @@ error NotInitialized();
 error AlreadyInitialized();
 
 library InternalFatIMTEvent {
+    function _reset(FatIMTData storage self) internal {
+        InternalFatIMTCore._reset(self);
+    }
+
     /// @dev Checks whether the tree has been initialized.
     function _isInitialized(FatIMTData storage self) internal view returns (bool) {
         return self.treeId != 0;
@@ -72,6 +76,7 @@ library InternalFatIMTEvent {
             revert NotInitialized();
         }
         emit NewLeaf(treeId, index, leaf);
+        emit NewRoot(treeId, newRoot, self.size);
         return (newRoot, index);
     }
 
@@ -90,6 +95,7 @@ library InternalFatIMTEvent {
             revert NotInitialized();
         }
         emit NewLeaf(treeId, index, leaf);
+        emit NewRoot(treeId, newRoot, self.size);
         return (newRoot, index);
     }
 
@@ -112,7 +118,7 @@ library InternalFatIMTEvent {
                 ++i;
             }
         }
-
+        emit NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -138,7 +144,7 @@ library InternalFatIMTEvent {
                 ++i;
             }
         }
-
+        emit NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -168,6 +174,7 @@ library InternalFatIMTEvent {
             }
         }
         emit RepeatedLeafs(treeId, startIndex, nextIndex, value);
+        emit NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -199,6 +206,7 @@ library InternalFatIMTEvent {
             }
         }
         emit RepeatedLeafs(treeId, startIndex, nextIndex, value);
+        emit NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -246,6 +254,7 @@ library InternalFatIMTEvent {
             revert NotInitialized();
         }
         emit UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
+        emit NewRoot(treeId, newRoot, self.size);
         return (newRoot, oldLeaf);
     }
 
@@ -265,6 +274,7 @@ library InternalFatIMTEvent {
             revert NotInitialized();
         }
         emit UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
+        emit NewRoot(treeId, newRoot, self.size);
         return (newRoot, oldLeaf);
     }
 
@@ -289,6 +299,7 @@ library InternalFatIMTEvent {
         // emit event
         // no tree.id == 0 check here, self.size == 0 already does that, also stack limit is too tight
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
+        emit NewRoot(self.treeId, newRoot, self.size);
         return (newRoot, oldLeaves);
     }
 
@@ -314,6 +325,7 @@ library InternalFatIMTEvent {
         // emit event
         // no tree.id == 0 check here, self.size == 0 already does that, also stack limit is too tight
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
+        emit NewRoot(self.treeId, newRoot, self.size);
         return (newRoot, oldLeaves);
     }
 

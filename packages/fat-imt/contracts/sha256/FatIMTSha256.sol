@@ -16,6 +16,10 @@ library FatIMTSha256 {
         return InternalFatIMTEvent._init(self);
     }
 
+    function reset(FatIMTData storage self) public {
+        InternalFatIMTEvent._reset(self);
+    }
+
     // getNodes lives in FatIMTSha256Verify to keep this library under the EIP-170 size limit.
 
     function getLeaves(

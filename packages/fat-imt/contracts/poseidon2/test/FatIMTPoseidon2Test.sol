@@ -22,6 +22,10 @@ contract FatIMTPoseidon2Test {
         FatIMTPoseidon2.insert(data, leaf);
     }
 
+    function reset() external {
+        FatIMTPoseidon2.reset(data);
+    }
+
     function insertMany(uint256[] calldata leaves) external {
         FatIMTPoseidon2.insertMany(data, leaves);
     }

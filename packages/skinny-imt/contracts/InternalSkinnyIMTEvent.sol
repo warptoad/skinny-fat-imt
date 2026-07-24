@@ -2,13 +2,17 @@
 pragma solidity ^0.8.4;
 
 import {InternalSkinnyIMTCore, SkinnyIMTData, MultiProof, TreeEmpty} from "./InternalSkinnyIMTCore.sol";
-import {NewTree, NewLeaf, RepeatedLeafs, UpdatedLeaf} from "./interfaces/events.sol";
+import {NewTree, NewRoot, NewLeaf, RepeatedLeafs, UpdatedLeaf} from "./interfaces/events.sol";
 import {_emitUpdatedMany, _requireInField, _requireAllInField} from "./SkinnyIMTUtils.sol";
 
 error NotInitialized();
 error AlreadyInitialized();
 
 library InternalSkinnyIMTEvent {
+    function _reset(SkinnyIMTData storage self) internal {
+        InternalSkinnyIMTCore._reset(self);
+    }
+
     /// @dev Checks whether the tree has been initialized.
     /// @param self: A storage reference to the 'SkinnyIMTData' struct.
     /// @return True if the tree has been initialized, false otherwise.
@@ -47,6 +51,7 @@ library InternalSkinnyIMTEvent {
             revert NotInitialized();
         }
         emit NewLeaf(treeId, index, leaf);
+        emit NewRoot(treeId, newRoot, self.size);
         return (newRoot, index);
     }
 
@@ -65,6 +70,7 @@ library InternalSkinnyIMTEvent {
             revert NotInitialized();
         }
         emit NewLeaf(treeId, index, leaf);
+        emit NewRoot(treeId, newRoot, self.size);
         return (newRoot, index);
     }
 
@@ -92,7 +98,7 @@ library InternalSkinnyIMTEvent {
                 ++i;
             }
         }
-
+        emit NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -121,7 +127,7 @@ library InternalSkinnyIMTEvent {
                 ++i;
             }
         }
-
+        emit NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -144,6 +150,7 @@ library InternalSkinnyIMTEvent {
             revert NotInitialized();
         }
         emit RepeatedLeafs(treeId, startIndex, nextIndex, value);
+        emit NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -168,6 +175,7 @@ library InternalSkinnyIMTEvent {
             revert NotInitialized();
         }
         emit RepeatedLeafs(treeId, startIndex, nextIndex, value);
+        emit NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -217,6 +225,7 @@ library InternalSkinnyIMTEvent {
             revert NotInitialized();
         }
         emit UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
+        emit NewRoot(treeId, newRoot, self.size);
         return newRoot;
     }
 
@@ -239,6 +248,7 @@ library InternalSkinnyIMTEvent {
             revert NotInitialized();
         }
         emit UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
+        emit NewRoot(treeId, newRoot, self.size);
         return newRoot;
     }
 
@@ -263,6 +273,7 @@ library InternalSkinnyIMTEvent {
         // emit event
         // no tree.id == 0 check here, self.size == 0 already does that, also stack limit is too tight
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
+        emit NewRoot(self.treeId, newRoot, self.size);
         return newRoot;
     }
 
@@ -289,6 +300,7 @@ library InternalSkinnyIMTEvent {
         // emit event
         // no tree.id == 0 check here, self.size == 0 already does that, also stack limit is too tight
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
+        emit NewRoot(self.treeId, newRoot, self.size);
         return newRoot;
     }
 

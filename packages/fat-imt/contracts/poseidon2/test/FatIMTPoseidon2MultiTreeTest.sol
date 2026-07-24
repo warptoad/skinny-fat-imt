@@ -37,6 +37,6 @@ contract FatIMTPoseidon2MultiTreeTest is FatIMTFullNodeReadable {
     }
 
     function size(uint256 treeId) external view returns (uint256) {
-        return trees[treeId].skinnyData.size;
+        return trees[treeId].treeData.size;
     }
 }

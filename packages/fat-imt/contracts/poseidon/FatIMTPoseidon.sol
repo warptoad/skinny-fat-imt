@@ -15,6 +15,10 @@ library FatIMTPoseidon {
         return InternalFatIMTEvent._init(self);
     }
 
+    function reset(FatIMTData storage self) public {
+        InternalFatIMTEvent._reset(self);
+    }
+
     // getNodes lives in FatIMTPoseidonVerify to keep this library under the EIP-170 size limit.
 
     function getLeaves(

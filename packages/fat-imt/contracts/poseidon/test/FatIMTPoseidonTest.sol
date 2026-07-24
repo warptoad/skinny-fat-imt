@@ -18,6 +18,10 @@ contract FatIMTPoseidonTest {
         FatIMTPoseidon.init(data);
     }
 
+    function reset() external {
+        FatIMTPoseidon.reset(data);
+    }
+
     function insert(uint256 leaf) external {
         FatIMTPoseidon.insert(data, leaf);
     }
