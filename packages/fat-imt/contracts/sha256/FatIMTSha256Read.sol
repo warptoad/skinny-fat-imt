@@ -1,20 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {LibPoseidon2Yul} from "poseidon2-evm/src/bn254/yul/LibPoseidon2Yul.sol";
-
 import {InternalFatIMTEvent} from "../InternalFatIMTEvent.sol";
 import {FatIMTData} from "../InternalFatIMTCore.sol";
 import {TreeEmpty} from "../InternalFatIMTCore.sol";
+import {InternalFatIMTStorage, FatIMTDataFullNode} from "../InternalFatIMTStorage.sol";
 
-/// @title FatIMTPoseidon2Verify
+/// @title FatIMTSha256Read
 /// @notice Stateless proof verification (`proofToRoot` / `proofManyToRoot`) split out of
-/// `FatIMTPoseidon2` and `FatIMTPoseidon2FullNode` to keep those libraries under the
+/// `FatIMTSha256WriteArchiveNode` and `FatIMTSha256WriteFullNode` to keep those libraries under the
 /// EIP-170 contract size limit. Both functions take the whole proof as parameters and touch no
 /// storage, so a single library serves the plain and full-node trees alike.
-library FatIMTPoseidon2Verify {
-    function hasher(uint256[2] memory leaves) public pure returns (uint256) {
-        return LibPoseidon2Yul.hash_2(leaves[0], leaves[1]);
+/// Uses the non-field-checked (non-BN254) proof variants: sha256 outputs span the full uint256
+/// range, so leaves and siblings are never required to be in the snark field.
+library FatIMTSha256Read {
+    function hasher(uint256[2] memory input) internal pure returns (uint256) {
+        return uint256(sha256(abi.encodePacked(input[0], input[1])));
     }
 
     function root(FatIMTData storage self) public view returns (uint256) {
@@ -34,25 +35,44 @@ library FatIMTPoseidon2Verify {
         return InternalFatIMTEvent._getNodes(self, firstIndex, endIndex, level);
     }
 
-    function proofToRootBN254(
+    /// @notice Leaf getter for the plain/archive tree: its leaves live in the `nodes` mapping at
+    /// level 0, so this is `getNodes(self, ..., 0)`.
+    function getLeaves(
+        FatIMTData storage self,
+        uint256 firstIndex,
+        uint256 endIndex
+    ) public view returns (uint256[] memory) {
+        return InternalFatIMTEvent._getNodes(self, firstIndex, endIndex, 0);
+    }
+
+    /// @notice Leaf getter for the full-node tree: reads its dedicated `leaves` array (consecutive
+    /// storage slots, fast via debug_storageRangeAt). Pass the whole full-node struct, not `.treeData`.
+    function getLeaves(
+        FatIMTDataFullNode storage self,
+        uint256 firstIndex,
+        uint256 endIndex
+    ) public view returns (uint256[] memory) {
+        return InternalFatIMTStorage._getLeaves(self, firstIndex, endIndex);
+    }
+
+    function proofToRoot(
         uint256 treeDepth,
         uint256 treeSize,
         uint256 leaf,
         uint256 leafIndex,
         uint256[] calldata proofSiblings
     ) public view returns (uint256) {
-        return InternalFatIMTEvent._proofToRootBN254(treeDepth, treeSize, leaf, leafIndex, proofSiblings, hasher);
+        return InternalFatIMTEvent._proofToRoot(treeDepth, treeSize, leaf, leafIndex, proofSiblings, hasher);
     }
 
-    function proofManyToRootBN254(
+    function proofManyToRoot(
         uint256 treeDepth,
         uint256 treeSize,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
     ) public view returns (uint256) {
-        return
-            InternalFatIMTEvent._proofManyToRootBN254(treeDepth, treeSize, leaves, leafIndexes, proofSiblings, hasher);
+        return InternalFatIMTEvent._proofManyToRoot(treeDepth, treeSize, leaves, leafIndexes, proofSiblings, hasher);
     }
 
     function verify(
@@ -64,7 +84,7 @@ library FatIMTPoseidon2Verify {
         if (self.size == 0) {
             revert TreeEmpty();
         }
-        uint256 provenRoot = InternalFatIMTEvent._proofToRootBN254(
+        uint256 provenRoot = InternalFatIMTEvent._proofToRoot(
             self.depth,
             self.size,
             leaf,
@@ -85,7 +105,7 @@ library FatIMTPoseidon2Verify {
         if (self.size == 0) {
             revert TreeEmpty();
         }
-        uint256 provenRoot = InternalFatIMTEvent._proofManyToRootBN254(
+        uint256 provenRoot = InternalFatIMTEvent._proofManyToRoot(
             self.depth,
             self.size,
             leaves,

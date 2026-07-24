@@ -5,7 +5,7 @@ import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
 
 import {InternalSkinnyIMTStorage, SkinnyIMTDataFullNode} from "../InternalSkinnyIMTStorage.sol";
 
-library SkinnyIMTPoseidonFullNode {
+library SkinnyIMTPoseidonWriteFullNode {
     // Kept private: the hasher is only used internally as a function pointer. The optimal call path is
     // inlined anyway, and a standalone hasher costs the same gas deployed separately — so no public entry.
     // getLeaves is intentionally NOT exposed here; inherit SkinnyIMTFullNodeReadable for that.
@@ -17,7 +17,7 @@ library SkinnyIMTPoseidonFullNode {
         return InternalSkinnyIMTStorage._init(self);
     }
 
-    function reset(SkinnyIMTDataFullNode storage self) public {
+    function reset(SkinnyIMTDataFullNode storage self) internal {
         InternalSkinnyIMTStorage._reset(self);
     }
 
@@ -40,7 +40,7 @@ library SkinnyIMTPoseidonFullNode {
         return InternalSkinnyIMTStorage._insertManyRepeatedBN254(self, value, amount, hasher);
     }
 
-    function precomputeRepeatedCache(SkinnyIMTDataFullNode storage self, uint256 value, uint256 upToLevel) public {
+    function precomputeRepeatedCache(SkinnyIMTDataFullNode storage self, uint256 value, uint256 upToLevel) internal {
         return InternalSkinnyIMTStorage._precomputeRepeatedCacheBN254(self, value, upToLevel, hasher);
     }
 
@@ -63,9 +63,5 @@ library SkinnyIMTPoseidonFullNode {
     ) public returns (uint256) {
         return
             InternalSkinnyIMTStorage._updateManyBN254(self, oldLeaves, newLeaves, leafIndexes, proofSiblings, hasher);
-    }
-
-    function root(SkinnyIMTDataFullNode storage self) public view returns (uint256) {
-        return InternalSkinnyIMTStorage._root(self);
     }
 }

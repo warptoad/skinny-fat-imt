@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {SkinnyIMTPoseidonFullNode} from "../SkinnyIMTPoseidonFullNode.sol";
+import {SkinnyIMTPoseidonWriteFullNode} from "../SkinnyIMTPoseidonWriteFullNode.sol";
+import {SkinnyIMTPoseidonRead} from "../SkinnyIMTPoseidonRead.sol";
 import {SkinnyIMTDataFullNode} from "../../InternalSkinnyIMTStorage.sol";
 
 // TEST-ONLY single-tree wrapper around the FullNode lib (leaves stored in a storage array + events).
@@ -9,27 +10,27 @@ contract SkinnyIMTPoseidonFullNodeTest {
     SkinnyIMTDataFullNode internal data;
 
     constructor() {
-        SkinnyIMTPoseidonFullNode.init(data);
+        SkinnyIMTPoseidonWriteFullNode.init(data);
     }
 
     function reset() external {
-        SkinnyIMTPoseidonFullNode.reset(data);
+        SkinnyIMTPoseidonWriteFullNode.reset(data);
     }
 
     function insert(uint256 leaf) external {
-        SkinnyIMTPoseidonFullNode.insert(data, leaf);
+        SkinnyIMTPoseidonWriteFullNode.insert(data, leaf);
     }
 
     function insertMany(uint256[] calldata leaves) external {
-        SkinnyIMTPoseidonFullNode.insertMany(data, leaves);
+        SkinnyIMTPoseidonWriteFullNode.insertMany(data, leaves);
     }
 
     function insertManyRepeated(uint256 value, uint256 amount) external {
-        SkinnyIMTPoseidonFullNode.insertManyRepeated(data, value, amount);
+        SkinnyIMTPoseidonWriteFullNode.insertManyRepeated(data, value, amount);
     }
 
     function update(uint256 oldLeaf, uint256 newLeaf, uint256 index, uint256[] calldata siblingNodes) external {
-        SkinnyIMTPoseidonFullNode.update(data, oldLeaf, newLeaf, index, siblingNodes);
+        SkinnyIMTPoseidonWriteFullNode.update(data, oldLeaf, newLeaf, index, siblingNodes);
     }
 
     function updateMany(
@@ -38,7 +39,7 @@ contract SkinnyIMTPoseidonFullNodeTest {
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
     ) external {
-        SkinnyIMTPoseidonFullNode.updateMany(data, oldLeaves, newLeaves, leafIndexes, proofSiblings);
+        SkinnyIMTPoseidonWriteFullNode.updateMany(data, oldLeaves, newLeaves, leafIndexes, proofSiblings);
     }
 
     function size() external view returns (uint256) {
@@ -46,6 +47,6 @@ contract SkinnyIMTPoseidonFullNodeTest {
     }
 
     function root() public view returns (uint256) {
-        return SkinnyIMTPoseidonFullNode.root(data);
+        return SkinnyIMTPoseidonRead.root(data.treeData);
     }
 }

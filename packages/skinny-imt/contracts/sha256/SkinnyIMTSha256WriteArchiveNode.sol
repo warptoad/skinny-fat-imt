@@ -4,7 +4,7 @@ pragma solidity ^0.8.4;
 import {InternalSkinnyIMTEvent} from "../InternalSkinnyIMTEvent.sol";
 import {SkinnyIMTData} from "../InternalSkinnyIMTCore.sol";
 
-library SkinnyIMTSha256 {
+library SkinnyIMTSha256WriteArchiveNode {
     // sha256 is a built-in precompile (address 0x02); no external deployment needed.
     // These trees use the non-field-checked (non-BN254) variants: sha256 outputs span the
     // full uint256 range, so leaves and siblings are never required to be in the snark field.
@@ -16,7 +16,7 @@ library SkinnyIMTSha256 {
         return InternalSkinnyIMTEvent._init(self);
     }
 
-    function reset(SkinnyIMTData storage self) public {
+    function reset(SkinnyIMTData storage self) internal {
         InternalSkinnyIMTEvent._reset(self);
     }
 
@@ -39,7 +39,7 @@ library SkinnyIMTSha256 {
         return InternalSkinnyIMTEvent._insertManyRepeated(self, value, amount, hasher);
     }
 
-    function precomputeRepeatedCache(SkinnyIMTData storage self, uint256 value, uint256 upToLevel) public {
+    function precomputeRepeatedCache(SkinnyIMTData storage self, uint256 value, uint256 upToLevel) internal {
         return InternalSkinnyIMTEvent._precomputeRepeatedCache(self, value, upToLevel, hasher);
     }
 
@@ -61,9 +61,5 @@ library SkinnyIMTSha256 {
         uint256[] calldata proofSiblings
     ) public returns (uint256) {
         return InternalSkinnyIMTEvent._updateMany(self, oldLeaves, newLeaves, leafIndexes, proofSiblings, hasher);
-    }
-
-    function root(SkinnyIMTData storage self) public view returns (uint256) {
-        return InternalSkinnyIMTEvent._root(self);
     }
 }

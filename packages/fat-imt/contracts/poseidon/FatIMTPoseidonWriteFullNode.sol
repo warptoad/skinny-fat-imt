@@ -1,32 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {LibPoseidon2Yul} from "poseidon2-evm/src/bn254/yul/LibPoseidon2Yul.sol";
+import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
 
 import {InternalFatIMTStorage, FatIMTDataFullNode} from "../InternalFatIMTStorage.sol";
 
-library FatIMTPoseidon2FullNode {
-    function hasher(uint256[2] memory leaves) public pure returns (uint256) {
-        return LibPoseidon2Yul.hash_2(leaves[0], leaves[1]);
+library FatIMTPoseidonWriteFullNode {
+    function hasher(uint256[2] memory input) internal pure returns (uint256) {
+        return PoseidonT3.hash(input);
     }
 
     function init(FatIMTDataFullNode storage self) public returns (uint256) {
         return InternalFatIMTStorage._init(self);
     }
 
-    function reset(FatIMTDataFullNode storage self) public {
+    function reset(FatIMTDataFullNode storage self) internal {
         InternalFatIMTStorage._reset(self);
     }
 
-    // getNodes lives in FatIMTPoseidon2Verify (call it with `.treeData`) to keep this library under
-    // the EIP-170 size limit. getLeaves stays here since it reads this tree's own `leaves` array.
-    function getLeaves(
-        FatIMTDataFullNode storage self,
-        uint256 firstIndex,
-        uint256 endIndex
-    ) public view returns (uint256[] memory) {
-        return InternalFatIMTStorage._getLeaves(self, firstIndex, endIndex);
-    }
+    // getNodes and getLeaves both live in FatIMTPoseidonRead to keep this library under the EIP-170
+    // size limit (getNodes reads `.treeData`; getLeaves takes the whole full-node struct for `leaves`).
 
     function insert(FatIMTDataFullNode storage self, uint256 leaf) public returns (uint256, uint256) {
         return InternalFatIMTStorage._insertBN254(self, leaf, hasher);
@@ -47,7 +40,7 @@ library FatIMTPoseidon2FullNode {
         return InternalFatIMTStorage._insertManyRepeatedBN254(self, value, amount, hasher);
     }
 
-    function precomputeRepeatedCache(FatIMTDataFullNode storage self, uint256 value, uint256 upToLevel) public {
+    function precomputeRepeatedCache(FatIMTDataFullNode storage self, uint256 value, uint256 upToLevel) internal {
         return InternalFatIMTStorage._precomputeRepeatedCacheBN254(self, value, upToLevel, hasher);
     }
 
@@ -65,9 +58,5 @@ library FatIMTPoseidon2FullNode {
         uint256[] calldata leafIndexes
     ) public returns (uint256, uint256[] memory) {
         return InternalFatIMTStorage._updateManyBN254(self, newLeaves, leafIndexes, hasher);
-    }
-
-    function root(FatIMTDataFullNode storage self) public view returns (uint256) {
-        return InternalFatIMTStorage._root(self);
     }
 }

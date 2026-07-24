@@ -1,7 +1,7 @@
 import { task, types } from "hardhat/config"
 import { ethers } from "ethers"
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers"
-import { SkinnyIMTSha256__factory } from "../typechain-types"
+import { SkinnyIMTSha256WriteArchiveNode__factory } from "../typechain-types"
 
 // sha256 is a built-in EVM precompile at address 0x02 — no external deployment needed.
 export async function deploySha256(_provider: ethers.Provider, _sender: ethers.Signer | HardhatEthersSigner) {
@@ -13,9 +13,9 @@ task("deploy:imt-sha256-test", "Deploy an IMT contract for testing a library")
     .addOptionalParam<boolean>("logs", "Print the logs", true, types.boolean)
     .addOptionalParam<number>("arity", "The arity of the tree", 2, types.int)
     .setAction(async ({ logs, library: libraryName, arity }, { ethers }): Promise<any> => {
-        const LibraryFactory = (await ethers.getContractFactory(libraryName, {
+        const LibraryFactory = (await ethers.getContractFactory(`${libraryName}WriteArchiveNode`, {
             libraries: {}
-        })) as SkinnyIMTSha256__factory
+        })) as SkinnyIMTSha256WriteArchiveNode__factory
 
         const library = await LibraryFactory.deploy()
         const libraryAddress = await library.getAddress()
@@ -26,18 +26,18 @@ task("deploy:imt-sha256-test", "Deploy an IMT contract for testing a library")
 
         // Stateless proof verification was split into its own library to keep the main library
         // under the contract size limit; the test contract links both.
-        const VerifyFactory = await ethers.getContractFactory("SkinnyIMTSha256Verify", { libraries: {} })
+        const VerifyFactory = await ethers.getContractFactory(`${libraryName}Read`, { libraries: {} })
         const verifyLibrary = await VerifyFactory.deploy()
         const verifyLibraryAddress = await verifyLibrary.getAddress()
 
         if (logs) {
-            console.info(`SkinnyIMTSha256Verify library has been deployed to: ${verifyLibraryAddress}`)
+            console.info(`${libraryName}Read library has been deployed to: ${verifyLibraryAddress}`)
         }
 
         const ContractFactory = await ethers.getContractFactory(`${libraryName}Test`, {
             libraries: {
-                [libraryName]: libraryAddress,
-                SkinnyIMTSha256Verify: verifyLibraryAddress
+                [`${libraryName}WriteArchiveNode`]: libraryAddress,
+                [`${libraryName}Read`]: verifyLibraryAddress
             }
         })
 

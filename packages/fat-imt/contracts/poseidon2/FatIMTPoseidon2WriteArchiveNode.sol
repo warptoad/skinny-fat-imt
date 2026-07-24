@@ -6,7 +6,7 @@ import {LibPoseidon2Yul} from "poseidon2-evm/src/bn254/yul/LibPoseidon2Yul.sol";
 import {InternalFatIMTEvent} from "../InternalFatIMTEvent.sol";
 import {FatIMTData} from "../InternalFatIMTCore.sol";
 
-library FatIMTPoseidon2 {
+library FatIMTPoseidon2WriteArchiveNode {
     function hasher(uint256[2] memory leaves) public pure returns (uint256) {
         return LibPoseidon2Yul.hash_2(leaves[0], leaves[1]);
     }
@@ -15,18 +15,11 @@ library FatIMTPoseidon2 {
         return InternalFatIMTEvent._init(self);
     }
 
-    function reset(FatIMTData storage self) public {
+    function reset(FatIMTData storage self) internal {
         InternalFatIMTEvent._reset(self);
     }
 
-    // getNodes lives in FatIMTPoseidon2Verify to keep this library under the EIP-170 size limit.
-    function getLeaves(
-        FatIMTData storage self,
-        uint256 firstIndex,
-        uint256 endIndex
-    ) public view returns (uint256[] memory) {
-        return InternalFatIMTEvent._getNodes(self, firstIndex, endIndex, 0);
-    }
+    // getNodes and getLeaves both live in FatIMTPoseidon2Read to keep this library under the EIP-170 size limit.
 
     function insert(FatIMTData storage self, uint256 leaf) public returns (uint256, uint256) {
         return InternalFatIMTEvent._insertBN254(self, leaf, hasher);
@@ -44,7 +37,7 @@ library FatIMTPoseidon2 {
         return InternalFatIMTEvent._insertManyRepeatedBN254(self, value, amount, hasher);
     }
 
-    function precomputeRepeatedCache(FatIMTData storage self, uint256 value, uint256 upToLevel) public {
+    function precomputeRepeatedCache(FatIMTData storage self, uint256 value, uint256 upToLevel) internal {
         return InternalFatIMTEvent._precomputeRepeatedCacheBN254(self, value, upToLevel, hasher);
     }
 
@@ -58,9 +51,5 @@ library FatIMTPoseidon2 {
         uint256[] calldata leafIndexes
     ) public returns (uint256, uint256[] memory) {
         return InternalFatIMTEvent._updateManyBN254(self, newLeaves, leafIndexes, hasher);
-    }
-
-    function root(FatIMTData storage self) public view returns (uint256) {
-        return InternalFatIMTEvent._root(self);
     }
 }

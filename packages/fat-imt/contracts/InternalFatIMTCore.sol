@@ -969,7 +969,7 @@ library InternalFatIMTCore {
 // _hashMultiProofLevel uses 2 arrays for tracking nodes. currentLevel and nextLevel. You can prob just do it in 1
 // same for insertMany probably, but that is vivians code so i would rather keep it as similar as possible
 // and ofc we can just split into multiple contracts that export these internal functions. example move verify functions
-// outside of FatIMTPoseidon2
+// outside of FatIMTPoseidon2WriteArchiveNode
 
 // old unused code
 // this is not used because it only adds to contract size and gas of these functions.

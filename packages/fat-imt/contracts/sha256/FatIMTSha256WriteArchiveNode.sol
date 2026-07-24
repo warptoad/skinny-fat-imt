@@ -4,7 +4,7 @@ pragma solidity ^0.8.4;
 import {InternalFatIMTEvent} from "../InternalFatIMTEvent.sol";
 import {FatIMTData} from "../InternalFatIMTCore.sol";
 
-library FatIMTSha256 {
+library FatIMTSha256WriteArchiveNode {
     // sha256 is a built-in precompile (address 0x02); no external deployment needed.
     // These trees use the non-field-checked (non-BN254) variants: sha256 outputs span the
     // full uint256 range, so leaves and siblings are never required to be in the snark field.
@@ -16,19 +16,11 @@ library FatIMTSha256 {
         return InternalFatIMTEvent._init(self);
     }
 
-    function reset(FatIMTData storage self) public {
+    function reset(FatIMTData storage self) internal {
         InternalFatIMTEvent._reset(self);
     }
 
-    // getNodes lives in FatIMTSha256Verify to keep this library under the EIP-170 size limit.
-
-    function getLeaves(
-        FatIMTData storage self,
-        uint256 firstIndex,
-        uint256 endIndex
-    ) public view returns (uint256[] memory) {
-        return InternalFatIMTEvent._getNodes(self, firstIndex, endIndex, 0);
-    }
+    // getNodes and getLeaves both live in FatIMTSha256Read to keep this library under the EIP-170 size limit.
 
     function insert(FatIMTData storage self, uint256 leaf) public returns (uint256, uint256) {
         return InternalFatIMTEvent._insert(self, leaf, hasher);
@@ -46,7 +38,7 @@ library FatIMTSha256 {
         return InternalFatIMTEvent._insertManyRepeated(self, value, amount, hasher);
     }
 
-    function precomputeRepeatedCache(FatIMTData storage self, uint256 value, uint256 upToLevel) public {
+    function precomputeRepeatedCache(FatIMTData storage self, uint256 value, uint256 upToLevel) internal {
         return InternalFatIMTEvent._precomputeRepeatedCache(self, value, upToLevel, hasher);
     }
 
@@ -60,9 +52,5 @@ library FatIMTSha256 {
         uint256[] calldata leafIndexes
     ) public returns (uint256, uint256[] memory) {
         return InternalFatIMTEvent._updateMany(self, newLeaves, leafIndexes, hasher);
-    }
-
-    function root(FatIMTData storage self) public view returns (uint256) {
-        return InternalFatIMTEvent._root(self);
     }
 }

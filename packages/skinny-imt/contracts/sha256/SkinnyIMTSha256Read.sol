@@ -1,52 +1,44 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
-
 import {InternalSkinnyIMTEvent} from "../InternalSkinnyIMTEvent.sol";
 import {SkinnyIMTData} from "../InternalSkinnyIMTCore.sol";
 import {TreeEmpty} from "../InternalSkinnyIMTCore.sol";
 
-/// @title SkinnyIMTPoseidonVerify
+/// @title SkinnyIMTSha256Read
 /// @notice Stateless proof verification (`proofToRoot` / `proofManyToRoot`) split out of
-/// `SkinnyIMTPoseidon2` and `SkinnyIMTPoseidon2FullNode` to keep those libraries under the
+/// `SkinnyIMTSha256WriteArchiveNode` and `SkinnyIMTSha256WriteFullNode` to keep those libraries under the
 /// EIP-170 contract size limit. Both functions take the whole proof as parameters and touch no
 /// storage, so a single library serves the plain and full-node trees alike.
-library SkinnyIMTPoseidonVerify {
+/// Uses the non-field-checked (non-BN254) proof variants: sha256 outputs span the full uint256
+/// range, so leaves and siblings are never required to be in the snark field.
+library SkinnyIMTSha256Read {
     function hasher(uint256[2] memory input) public pure returns (uint256) {
-        return PoseidonT3.hash(input);
+        return uint256(sha256(abi.encodePacked(input[0], input[1])));
     }
 
     function root(SkinnyIMTData storage self) public view returns (uint256) {
         return InternalSkinnyIMTEvent._root(self);
     }
 
-    function proofToRootBN254(
+    function proofToRoot(
         uint256 treeDepth,
         uint256 treeSize,
         uint256 leaf,
         uint256 leafIndex,
         uint256[] calldata proofSiblings
     ) public view returns (uint256) {
-        return InternalSkinnyIMTEvent._proofToRootBN254(treeDepth, treeSize, leaf, leafIndex, proofSiblings, hasher);
+        return InternalSkinnyIMTEvent._proofToRoot(treeDepth, treeSize, leaf, leafIndex, proofSiblings, hasher);
     }
 
-    function proofManyToRootBN254(
+    function proofManyToRoot(
         uint256 treeDepth,
         uint256 treeSize,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
     ) public view returns (uint256) {
-        return
-            InternalSkinnyIMTEvent._proofManyToRootBN254(
-                treeDepth,
-                treeSize,
-                leaves,
-                leafIndexes,
-                proofSiblings,
-                hasher
-            );
+        return InternalSkinnyIMTEvent._proofManyToRoot(treeDepth, treeSize, leaves, leafIndexes, proofSiblings, hasher);
     }
 
     function verify(
@@ -58,7 +50,7 @@ library SkinnyIMTPoseidonVerify {
         if (self.size == 0) {
             revert TreeEmpty();
         }
-        uint256 provenRoot = InternalSkinnyIMTEvent._proofToRootBN254(
+        uint256 provenRoot = InternalSkinnyIMTEvent._proofToRoot(
             self.depth,
             self.size,
             leaf,
@@ -79,7 +71,7 @@ library SkinnyIMTPoseidonVerify {
         if (self.size == 0) {
             revert TreeEmpty();
         }
-        uint256 provenRoot = InternalSkinnyIMTEvent._proofManyToRootBN254(
+        uint256 provenRoot = InternalSkinnyIMTEvent._proofManyToRoot(
             self.depth,
             self.size,
             leaves,

@@ -17,10 +17,10 @@ const hardhatConfig: HardhatUserConfig = {
     },
     networks: {
         hardhat: {
-            // libraries are compiled with runs: 2**32-1 (min runtime gas), so some exceed the
-            // EIP-170 24576-byte limit. Allow deploying them on the test network for now; the size
-            // golfing is a follow-up.
-            allowUnlimitedContractSize: true
+            // this library compiles with extremely high runs because the inlined poseidon libraries benefit greatly
+            // from this. However the down side is that the contract size becomes massive, skinny and fat imt already
+            // split into read and write to deal with this and to stay under the EIP-170 24576-byte limit.
+            // allowUnlimitedContractSize: true
         }
     },
     gasReporter: {

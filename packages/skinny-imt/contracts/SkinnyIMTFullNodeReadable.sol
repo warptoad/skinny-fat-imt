@@ -19,7 +19,7 @@ import {NotInitialized} from "./InternalSkinnyIMTEvent.sol";
 /// poseidon / poseidon2 / sha256. The consumer still wires the hash-specific operations itself:
 ///
 ///   contract MyTrees is SkinnyIMTFullNodeReadable {
-///       using SkinnyIMTPoseidon2FullNode for SkinnyIMTDataFullNode;
+///       using SkinnyIMTPoseidon2WriteFullNode for SkinnyIMTDataFullNode;
 ///       mapping(uint256 => SkinnyIMTDataFullNode) internal trees;
 ///
 ///       function _tree(uint256 treeId) internal view override returns (SkinnyIMTDataFullNode storage) {

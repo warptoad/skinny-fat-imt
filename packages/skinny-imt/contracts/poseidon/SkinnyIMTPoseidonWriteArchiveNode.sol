@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {LibPoseidon2Yul} from "poseidon2-evm/src/bn254/yul/LibPoseidon2Yul.sol";
+import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
 
 import {InternalSkinnyIMTEvent} from "../InternalSkinnyIMTEvent.sol";
 import {SkinnyIMTData} from "../InternalSkinnyIMTCore.sol";
 
-library SkinnyIMTPoseidon2 {
-    function hasher(uint256[2] memory leaves) private pure returns (uint256) {
-        return LibPoseidon2Yul.hash_2(leaves[0], leaves[1]);
+library SkinnyIMTPoseidonWriteArchiveNode {
+    function hasher(uint256[2] memory input) private pure returns (uint256) {
+        return PoseidonT3.hash(input);
     }
 
     function init(SkinnyIMTData storage self) public returns (uint256) {
         return InternalSkinnyIMTEvent._init(self);
     }
 
-    function reset(SkinnyIMTData storage self) public {
+    function reset(SkinnyIMTData storage self) internal {
         InternalSkinnyIMTEvent._reset(self);
     }
 
@@ -38,7 +38,7 @@ library SkinnyIMTPoseidon2 {
         return InternalSkinnyIMTEvent._insertManyRepeatedBN254(self, value, amount, hasher);
     }
 
-    function precomputeRepeatedCache(SkinnyIMTData storage self, uint256 value, uint256 upToLevel) public {
+    function precomputeRepeatedCache(SkinnyIMTData storage self, uint256 value, uint256 upToLevel) internal {
         return InternalSkinnyIMTEvent._precomputeRepeatedCacheBN254(self, value, upToLevel, hasher);
     }
 
@@ -60,9 +60,5 @@ library SkinnyIMTPoseidon2 {
         uint256[] calldata proofSiblings
     ) public returns (uint256) {
         return InternalSkinnyIMTEvent._updateManyBN254(self, oldLeaves, newLeaves, leafIndexes, proofSiblings, hasher);
-    }
-
-    function root(SkinnyIMTData storage self) public view returns (uint256) {
-        return InternalSkinnyIMTEvent._root(self);
     }
 }

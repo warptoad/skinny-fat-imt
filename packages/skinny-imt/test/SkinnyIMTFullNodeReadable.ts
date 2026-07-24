@@ -24,12 +24,18 @@ describe("SkinnyIMTFullNodeReadable (multi-tree)", () => {
         await deployPoseidon2(ethers.provider, sender)
 
         const fullNode = await (
-            await ethers.getContractFactory("SkinnyIMTPoseidon2FullNode", { libraries: {} })
+            await ethers.getContractFactory("SkinnyIMTPoseidon2WriteFullNode", { libraries: {} })
         ).deploy()
+
+        // root() moved to the Read library, which MultiTreeTest now calls, so it must be linked too.
+        const read = await (await ethers.getContractFactory("SkinnyIMTPoseidon2Read", { libraries: {} })).deploy()
 
         const contract = await (
             await ethers.getContractFactory("SkinnyIMTPoseidon2MultiTreeTest", {
-                libraries: { SkinnyIMTPoseidon2FullNode: await fullNode.getAddress() }
+                libraries: {
+                    SkinnyIMTPoseidon2WriteFullNode: await fullNode.getAddress(),
+                    SkinnyIMTPoseidon2Read: await read.getAddress()
+                }
             })
         ).deploy()
 
@@ -54,6 +60,27 @@ describe("SkinnyIMTFullNodeReadable (multi-tree)", () => {
 
         // a sub-range, to confirm [from, to) is honoured per tree
         expect(await contract.getLeaves(TREE_A, 1, 3)).to.deep.equal(leavesA.slice(1))
+    })
+
+    it("Should clear a tree's leaves array on reset, then rebuild with no stale leaves", async () => {
+        const { contract } = await deploy()
+
+        expect(await contract.getLeaves(TREE_A, 0, leavesA.length)).to.deep.equal(leavesA)
+
+        await contract.reset(TREE_A)
+        expect(await contract.size(TREE_A)).to.equal(0)
+        expect(await contract.getLeaves(TREE_A, 0, 0)).to.deep.equal([])
+
+        // Re-insert FEWER, DIFFERENT leaves. If reset had not done `delete self.leaves`, the array
+        // would still hold the old leaves at index 0..1 and this would read [11, 22], not [77, 88].
+        await contract.insertMany(TREE_A, [77n, 88n])
+        expect(await contract.size(TREE_A)).to.equal(2)
+        expect(await contract.getLeaves(TREE_A, 0, 2)).to.deep.equal([77n, 88n])
+        // the array is exactly length 2 now: reading past it reverts
+        await expect(contract.getLeaves(TREE_A, 0, 3)).to.be.reverted
+
+        // the other tree is untouched by the reset
+        expect(await contract.getLeaves(TREE_B, 0, leavesB.length)).to.deep.equal(leavesB)
     })
 
     it("Should give each tree a distinct, non-zero leavesBaseSlot", async () => {

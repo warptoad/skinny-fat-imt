@@ -2,7 +2,8 @@
 
 pragma solidity ^0.8.4;
 
-import {SkinnyIMTPoseidon2FullNode} from "../SkinnyIMTPoseidon2FullNode.sol";
+import {SkinnyIMTPoseidon2WriteFullNode} from "../SkinnyIMTPoseidon2WriteFullNode.sol";
+import {SkinnyIMTPoseidon2Read} from "../SkinnyIMTPoseidon2Read.sol";
 import {SkinnyIMTFullNodeReadable} from "../../SkinnyIMTFullNodeReadable.sol";
 import {SkinnyIMTDataFullNode} from "../../InternalSkinnyIMTStorage.sol";
 
@@ -17,15 +18,19 @@ contract SkinnyIMTPoseidon2MultiTreeTest is SkinnyIMTFullNodeReadable {
     }
 
     function init(uint256 treeId) external returns (uint256) {
-        return SkinnyIMTPoseidon2FullNode.init(trees[treeId]);
+        return SkinnyIMTPoseidon2WriteFullNode.init(trees[treeId]);
+    }
+
+    function reset(uint256 treeId) external {
+        SkinnyIMTPoseidon2WriteFullNode.reset(trees[treeId]);
     }
 
     function insert(uint256 treeId, uint256 leaf) external {
-        SkinnyIMTPoseidon2FullNode.insert(trees[treeId], leaf);
+        SkinnyIMTPoseidon2WriteFullNode.insert(trees[treeId], leaf);
     }
 
     function insertMany(uint256 treeId, uint256[] calldata leaves) external {
-        SkinnyIMTPoseidon2FullNode.insertMany(trees[treeId], leaves);
+        SkinnyIMTPoseidon2WriteFullNode.insertMany(trees[treeId], leaves);
     }
 
     // skinny's update still consumes a merkle proof (oldLeaf + proofSiblings), unlike fat's proof-less update
@@ -36,11 +41,11 @@ contract SkinnyIMTPoseidon2MultiTreeTest is SkinnyIMTFullNodeReadable {
         uint256 leafIndex,
         uint256[] calldata proofSiblings
     ) external {
-        SkinnyIMTPoseidon2FullNode.update(trees[treeId], oldLeaf, newLeaf, leafIndex, proofSiblings);
+        SkinnyIMTPoseidon2WriteFullNode.update(trees[treeId], oldLeaf, newLeaf, leafIndex, proofSiblings);
     }
 
     function root(uint256 treeId) external view returns (uint256) {
-        return SkinnyIMTPoseidon2FullNode.root(trees[treeId]);
+        return SkinnyIMTPoseidon2Read.root(trees[treeId].treeData);
     }
 
     function size(uint256 treeId) external view returns (uint256) {

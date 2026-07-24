@@ -2,7 +2,8 @@
 
 pragma solidity ^0.8.4;
 
-import {FatIMTPoseidon2FullNode} from "../FatIMTPoseidon2FullNode.sol";
+import {FatIMTPoseidon2WriteFullNode} from "../FatIMTPoseidon2WriteFullNode.sol";
+import {FatIMTPoseidon2Read} from "../FatIMTPoseidon2Read.sol";
 import {FatIMTFullNodeReadable} from "../../FatIMTFullNodeReadable.sol";
 import {FatIMTDataFullNode} from "../../InternalFatIMTStorage.sol";
 
@@ -17,23 +18,27 @@ contract FatIMTPoseidon2MultiTreeTest is FatIMTFullNodeReadable {
     }
 
     function init(uint256 treeId) external returns (uint256) {
-        return FatIMTPoseidon2FullNode.init(trees[treeId]);
+        return FatIMTPoseidon2WriteFullNode.init(trees[treeId]);
+    }
+
+    function reset(uint256 treeId) external {
+        FatIMTPoseidon2WriteFullNode.reset(trees[treeId]);
     }
 
     function insert(uint256 treeId, uint256 leaf) external {
-        FatIMTPoseidon2FullNode.insert(trees[treeId], leaf);
+        FatIMTPoseidon2WriteFullNode.insert(trees[treeId], leaf);
     }
 
     function insertMany(uint256 treeId, uint256[] calldata leaves) external {
-        FatIMTPoseidon2FullNode.insertMany(trees[treeId], leaves);
+        FatIMTPoseidon2WriteFullNode.insertMany(trees[treeId], leaves);
     }
 
     function update(uint256 treeId, uint256 newLeaf, uint256 leafIndex) external {
-        FatIMTPoseidon2FullNode.update(trees[treeId], newLeaf, leafIndex);
+        FatIMTPoseidon2WriteFullNode.update(trees[treeId], newLeaf, leafIndex);
     }
 
     function root(uint256 treeId) external view returns (uint256) {
-        return FatIMTPoseidon2FullNode.root(trees[treeId]);
+        return FatIMTPoseidon2Read.root(trees[treeId].treeData);
     }
 
     function size(uint256 treeId) external view returns (uint256) {

@@ -7,12 +7,12 @@ import {InternalSkinnyIMTEvent} from "../InternalSkinnyIMTEvent.sol";
 import {SkinnyIMTData} from "../InternalSkinnyIMTCore.sol";
 import {TreeEmpty} from "../InternalSkinnyIMTCore.sol";
 
-/// @title SkinnyIMTPoseidon2Verify
+/// @title SkinnyIMTPoseidon2Read
 /// @notice Stateless proof verification (`proofToRoot` / `proofManyToRoot`) split out of
-/// `SkinnyIMTPoseidon2` and `SkinnyIMTPoseidon2FullNode` to keep those libraries under the
+/// `SkinnyIMTPoseidon2WriteArchiveNode` and `SkinnyIMTPoseidon2WriteFullNode` to keep those libraries under the
 /// EIP-170 contract size limit. Both functions take the whole proof as parameters and touch no
 /// storage, so a single library serves the plain and full-node trees alike.
-library SkinnyIMTPoseidon2Verify {
+library SkinnyIMTPoseidon2Read {
     function hasher(uint256[2] memory leaves) public pure returns (uint256) {
         return LibPoseidon2Yul.hash_2(leaves[0], leaves[1]);
     }

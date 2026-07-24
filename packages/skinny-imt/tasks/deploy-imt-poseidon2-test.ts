@@ -1,7 +1,7 @@
 import { task, types } from "hardhat/config"
 import { createPublicClient, createWalletClient, custom } from "viem"
 import { hardhat } from "viem/chains"
-import { SkinnyIMTPoseidon2__factory } from "../typechain-types"
+import { SkinnyIMTPoseidon2WriteArchiveNode__factory } from "../typechain-types"
 //import { deployPoseidon2Huff } from "@warptoad/gigabridge-js"
 import { proxy } from "poseidon-solidity"
 import { ethers } from "ethers"
@@ -63,9 +63,9 @@ task("deploy:imt-poseidon2-test", "Deploy an IMT contract for testing a library"
             console.info(`PoseidonT${arity + 1} library has been deployed to: ${poseidonAddress}`)
         }
 
-        const LibraryFactory = (await ethers.getContractFactory(libraryName, {
+        const LibraryFactory = (await ethers.getContractFactory(`${libraryName}WriteArchiveNode`, {
             libraries: {}
-        })) as SkinnyIMTPoseidon2__factory
+        })) as SkinnyIMTPoseidon2WriteArchiveNode__factory
 
         const library = await LibraryFactory.deploy()
         const libraryAddress = await library.getAddress()
@@ -76,18 +76,18 @@ task("deploy:imt-poseidon2-test", "Deploy an IMT contract for testing a library"
 
         // Stateless proof verification was split into its own library to keep the main library
         // under the contract size limit; the test contract links both.
-        const VerifyFactory = await ethers.getContractFactory("SkinnyIMTPoseidon2Verify", { libraries: {} })
+        const VerifyFactory = await ethers.getContractFactory(`${libraryName}Read`, { libraries: {} })
         const verifyLibrary = await VerifyFactory.deploy()
         const verifyLibraryAddress = await verifyLibrary.getAddress()
 
         if (logs) {
-            console.info(`SkinnyIMTPoseidon2Verify library has been deployed to: ${verifyLibraryAddress}`)
+            console.info(`${libraryName}Read library has been deployed to: ${verifyLibraryAddress}`)
         }
 
         const ContractFactory = await ethers.getContractFactory(`${libraryName}Test`, {
             libraries: {
-                [libraryName]: libraryAddress,
-                SkinnyIMTPoseidon2Verify: verifyLibraryAddress
+                [`${libraryName}WriteArchiveNode`]: libraryAddress,
+                [`${libraryName}Read`]: verifyLibraryAddress
             }
         })
 

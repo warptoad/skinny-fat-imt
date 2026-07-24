@@ -3,7 +3,7 @@ pragma solidity ^0.8.4;
 
 import {InternalFatIMTStorage, FatIMTDataFullNode} from "../InternalFatIMTStorage.sol";
 
-library FatIMTSha256FullNode {
+library FatIMTSha256WriteFullNode {
     // sha256 is a built-in precompile (address 0x02); no external deployment needed.
     // Uses the non-field-checked (non-BN254) variants: sha256 outputs span the full uint256
     // range, so leaves and siblings are never required to be in the snark field.
@@ -15,20 +15,12 @@ library FatIMTSha256FullNode {
         return InternalFatIMTStorage._init(self);
     }
 
-    function reset(FatIMTDataFullNode storage self) public {
+    function reset(FatIMTDataFullNode storage self) internal {
         InternalFatIMTStorage._reset(self);
     }
 
-    // getNodes lives in FatIMTSha256Verify (call it with `.treeData`) to keep this library under
-    // the EIP-170 size limit. getLeaves stays here since it reads this tree's own `leaves` array.
-
-    function getLeaves(
-        FatIMTDataFullNode storage self,
-        uint256 firstIndex,
-        uint256 endIndex
-    ) public view returns (uint256[] memory) {
-        return InternalFatIMTStorage._getLeaves(self, firstIndex, endIndex);
-    }
+    // getNodes and getLeaves both live in FatIMTSha256Read to keep this library under the EIP-170
+    // size limit (getNodes reads `.treeData`; getLeaves takes the whole full-node struct for `leaves`).
 
     function insert(FatIMTDataFullNode storage self, uint256 leaf) public returns (uint256, uint256) {
         return InternalFatIMTStorage._insert(self, leaf, hasher);
@@ -49,7 +41,7 @@ library FatIMTSha256FullNode {
         return InternalFatIMTStorage._insertManyRepeated(self, value, amount, hasher);
     }
 
-    function precomputeRepeatedCache(FatIMTDataFullNode storage self, uint256 value, uint256 upToLevel) public {
+    function precomputeRepeatedCache(FatIMTDataFullNode storage self, uint256 value, uint256 upToLevel) internal {
         return InternalFatIMTStorage._precomputeRepeatedCache(self, value, upToLevel, hasher);
     }
 
@@ -67,9 +59,5 @@ library FatIMTSha256FullNode {
         uint256[] calldata leafIndexes
     ) public returns (uint256, uint256[] memory) {
         return InternalFatIMTStorage._updateMany(self, newLeaves, leafIndexes, hasher);
-    }
-
-    function root(FatIMTDataFullNode storage self) public view returns (uint256) {
-        return InternalFatIMTStorage._root(self);
     }
 }

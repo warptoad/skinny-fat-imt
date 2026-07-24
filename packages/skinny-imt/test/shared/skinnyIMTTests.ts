@@ -1362,6 +1362,32 @@ export function runSkinnyIMTTests(config: SkinnyIMTTestConfig) {
             })
         })
 
+        describe("# reset", () => {
+            it("Should clear the tree back to empty, then rebuild correctly from scratch", async () => {
+                // fill the tree
+                for (let i = 0; i < 5; i += 1) {
+                    await skinnyIMTTest.insert(i + 1)
+                }
+                expect(await skinnyIMTTest.size()).to.equal(5)
+
+                // reset wipes size + depth
+                await skinnyIMTTest.reset()
+                expect(await skinnyIMTTest.size()).to.equal(0)
+                expect(await skinnyIMTTest.depth()).to.equal(0)
+
+                // re-fill with a DIFFERENT set; the root must match a fresh reference tree built
+                // only from the post-reset leaves — proving no stale state survived the reset.
+                const leaves = [11n, 22n, 33n]
+                for (const leaf of leaves) {
+                    await skinnyIMTTest.insert(leaf)
+                }
+                jsLeanIMT.insertMany(leaves)
+
+                expect(await skinnyIMTTest.size()).to.equal(leaves.length)
+                expect(await skinnyIMTTest.root()).to.equal(jsLeanIMT.root)
+            })
+        })
+
         // The _update / insertMany / insertManyRepeated sideNode-write optimization SKIPS
         // writes it deems dead (a slot the next op overwrites before reading). A wrongly
         // skipped *live* write only surfaces later, as a wrong root on an op that READS

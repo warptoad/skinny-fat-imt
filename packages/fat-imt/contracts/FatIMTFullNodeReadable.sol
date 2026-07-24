@@ -18,7 +18,7 @@ import {NotInitialized} from "./InternalFatIMTEvent.sol";
 /// poseidon / poseidon2 / sha256. The consumer still wires the hash-specific operations itself:
 ///
 ///   contract MyTrees is FatIMTFullNodeReadable {
-///       using FatIMTPoseidon2FullNode for FatIMTDataFullNode;
+///       using FatIMTPoseidon2WriteFullNode for FatIMTDataFullNode;
 ///       mapping(uint256 => FatIMTDataFullNode) internal trees;
 ///
 ///       function _tree(uint256 treeId) internal view override returns (FatIMTDataFullNode storage) {

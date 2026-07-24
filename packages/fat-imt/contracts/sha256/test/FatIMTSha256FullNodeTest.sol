@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {FatIMTSha256FullNode} from "../FatIMTSha256FullNode.sol";
+import {FatIMTSha256WriteFullNode} from "../FatIMTSha256WriteFullNode.sol";
+import {FatIMTSha256Read} from "../FatIMTSha256Read.sol";
 import {FatIMTDataFullNode} from "../../InternalFatIMTStorage.sol";
 
 // TEST-ONLY single-tree wrapper around the FullNode lib (leaves stored in a storage array + events).
@@ -9,31 +10,31 @@ contract FatIMTSha256FullNodeTest {
     FatIMTDataFullNode internal data;
 
     constructor() {
-        FatIMTSha256FullNode.init(data);
+        FatIMTSha256WriteFullNode.init(data);
     }
 
     function reset() external {
-        FatIMTSha256FullNode.reset(data);
+        FatIMTSha256WriteFullNode.reset(data);
     }
 
     function insert(uint256 leaf) external {
-        FatIMTSha256FullNode.insert(data, leaf);
+        FatIMTSha256WriteFullNode.insert(data, leaf);
     }
 
     function insertMany(uint256[] calldata leaves) external {
-        FatIMTSha256FullNode.insertMany(data, leaves);
+        FatIMTSha256WriteFullNode.insertMany(data, leaves);
     }
 
     function insertManyRepeated(uint256 value, uint256 amount) external {
-        FatIMTSha256FullNode.insertManyRepeated(data, value, amount);
+        FatIMTSha256WriteFullNode.insertManyRepeated(data, value, amount);
     }
 
     function update(uint256 newLeaf, uint256 index) external {
-        FatIMTSha256FullNode.update(data, newLeaf, index);
+        FatIMTSha256WriteFullNode.update(data, newLeaf, index);
     }
 
     function updateMany(uint256[] calldata newLeaves, uint256[] calldata leafIndexes) external {
-        FatIMTSha256FullNode.updateMany(data, newLeaves, leafIndexes);
+        FatIMTSha256WriteFullNode.updateMany(data, newLeaves, leafIndexes);
     }
 
     function size() external view returns (uint256) {
@@ -41,6 +42,6 @@ contract FatIMTSha256FullNodeTest {
     }
 
     function root() public view returns (uint256) {
-        return FatIMTSha256FullNode.root(data);
+        return FatIMTSha256Read.root(data.treeData);
     }
 }

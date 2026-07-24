@@ -6,13 +6,14 @@ import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
 import {InternalFatIMTEvent} from "../InternalFatIMTEvent.sol";
 import {FatIMTData} from "../InternalFatIMTCore.sol";
 import {TreeEmpty} from "../InternalFatIMTCore.sol";
+import {InternalFatIMTStorage, FatIMTDataFullNode} from "../InternalFatIMTStorage.sol";
 
-/// @title FatIMTPoseidonVerify
+/// @title FatIMTPoseidonRead
 /// @notice Stateless proof verification (`proofToRoot` / `proofManyToRoot`) split out of
-/// `FatIMTPoseidon2` and `FatIMTPoseidon2FullNode` to keep those libraries under the
+/// `FatIMTPoseidonWriteArchiveNode` and `FatIMTPoseidonWriteFullNode` to keep those libraries under the
 /// EIP-170 contract size limit. Both functions take the whole proof as parameters and touch no
 /// storage, so a single library serves the plain and full-node trees alike.
-library FatIMTPoseidonVerify {
+library FatIMTPoseidonRead {
     function hasher(uint256[2] memory input) internal pure returns (uint256) {
         return PoseidonT3.hash(input);
     }
@@ -32,6 +33,26 @@ library FatIMTPoseidonVerify {
         uint256 level
     ) public view returns (uint256[] memory) {
         return InternalFatIMTEvent._getNodes(self, firstIndex, endIndex, level);
+    }
+
+    /// @notice Leaf getter for the plain/archive tree: its leaves live in the `nodes` mapping at
+    /// level 0, so this is `getNodes(self, ..., 0)`.
+    function getLeaves(
+        FatIMTData storage self,
+        uint256 firstIndex,
+        uint256 endIndex
+    ) public view returns (uint256[] memory) {
+        return InternalFatIMTEvent._getNodes(self, firstIndex, endIndex, 0);
+    }
+
+    /// @notice Leaf getter for the full-node tree: reads its dedicated `leaves` array (consecutive
+    /// storage slots, fast via debug_storageRangeAt). Pass the whole full-node struct, not `.treeData`.
+    function getLeaves(
+        FatIMTDataFullNode storage self,
+        uint256 firstIndex,
+        uint256 endIndex
+    ) public view returns (uint256[] memory) {
+        return InternalFatIMTStorage._getLeaves(self, firstIndex, endIndex);
     }
 
     function proofToRootBN254(

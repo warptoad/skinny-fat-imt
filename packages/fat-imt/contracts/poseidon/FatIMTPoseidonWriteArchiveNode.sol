@@ -6,7 +6,7 @@ import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
 import {InternalFatIMTEvent} from "../InternalFatIMTEvent.sol";
 import {FatIMTData} from "../InternalFatIMTCore.sol";
 
-library FatIMTPoseidon {
+library FatIMTPoseidonWriteArchiveNode {
     function hasher(uint256[2] memory input) internal pure returns (uint256) {
         return PoseidonT3.hash(input);
     }
@@ -15,19 +15,11 @@ library FatIMTPoseidon {
         return InternalFatIMTEvent._init(self);
     }
 
-    function reset(FatIMTData storage self) public {
+    function reset(FatIMTData storage self) internal {
         InternalFatIMTEvent._reset(self);
     }
 
-    // getNodes lives in FatIMTPoseidonVerify to keep this library under the EIP-170 size limit.
-
-    function getLeaves(
-        FatIMTData storage self,
-        uint256 firstIndex,
-        uint256 endIndex
-    ) public view returns (uint256[] memory) {
-        return InternalFatIMTEvent._getNodes(self, firstIndex, endIndex, 0);
-    }
+    // getNodes and getLeaves both live in FatIMTPoseidonRead to keep this library under the EIP-170 size limit.
 
     function insert(FatIMTData storage self, uint256 leaf) public returns (uint256, uint256) {
         return InternalFatIMTEvent._insertBN254(self, leaf, hasher);
@@ -45,7 +37,7 @@ library FatIMTPoseidon {
         return InternalFatIMTEvent._insertManyRepeatedBN254(self, value, amount, hasher);
     }
 
-    function precomputeRepeatedCache(FatIMTData storage self, uint256 value, uint256 upToLevel) public {
+    function precomputeRepeatedCache(FatIMTData storage self, uint256 value, uint256 upToLevel) internal {
         return InternalFatIMTEvent._precomputeRepeatedCacheBN254(self, value, upToLevel, hasher);
     }
 
@@ -59,9 +51,5 @@ library FatIMTPoseidon {
         uint256[] calldata leafIndexes
     ) public returns (uint256, uint256[] memory) {
         return InternalFatIMTEvent._updateManyBN254(self, newLeaves, leafIndexes, hasher);
-    }
-
-    function root(FatIMTData storage self) public view returns (uint256) {
-        return InternalFatIMTEvent._root(self);
     }
 }
