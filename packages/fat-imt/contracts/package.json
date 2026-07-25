@@ -1,7 +1,7 @@
 {
     "name": "@warptoad/fat-imt.sol",
-    "version": "0.0.1",
-    "description": "Fat incremental Merkle tree implementation in Solidity.",
+    "version": "0.0.2",
+    "description": "Incremental merkle tree, with a lean structure and storage of all nodes on every level in solidity.",
     "license": "MIT",
     "files": [
         "*.sol",
