@@ -2,7 +2,7 @@ import { task, types } from "hardhat/config"
 import { createPublicClient, createWalletClient, custom } from "viem"
 import { hardhat } from "viem/chains"
 import { FatIMTPoseidon2WriteArchiveNode__factory } from "../typechain-types"
-//import { deployPoseidon2Huff } from "@warptoad/gigabridge-js"
+
 import { proxy } from "poseidon-solidity"
 import { ethers } from "ethers"
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers"
