@@ -9,7 +9,7 @@ import { deployPoseidon2 } from "../tasks/deploy-imt-poseidon2-test"
 
 // SkinnyIMTFullNodeReadable takes the tree as an input (treeId -> `_tree`) rather than assuming a
 // single tree at a fixed slot. These tests pin that down against a mapping layout, where every tree
-// lives at a keccak-derived slot: the readers must stay per-tree, and `leavesBaseSlot` must point at
+// lives at a keccak-derived slot: the readers must stay per-tree, and `skinnyLeavesBaseSlot` must point at
 // the slot the skinnyfatJs lib would actually read from.
 describe("SkinnyIMTFullNodeReadable (multi-tree)", () => {
     const hash = (a: bigint, b: bigint) => poseidon2Hash([a, b])
@@ -55,39 +55,39 @@ describe("SkinnyIMTFullNodeReadable (multi-tree)", () => {
     it("Should read each tree's leaves independently", async () => {
         const { contract } = await deploy()
 
-        expect(await contract.getLeaves(TREE_A, 0, leavesA.length)).to.deep.equal(leavesA)
-        expect(await contract.getLeaves(TREE_B, 0, leavesB.length)).to.deep.equal(leavesB)
+        expect(await contract.getSkinnyLeaves(TREE_A, 0, leavesA.length)).to.deep.equal(leavesA)
+        expect(await contract.getSkinnyLeaves(TREE_B, 0, leavesB.length)).to.deep.equal(leavesB)
 
         // a sub-range, to confirm [from, to) is honoured per tree
-        expect(await contract.getLeaves(TREE_A, 1, 3)).to.deep.equal(leavesA.slice(1))
+        expect(await contract.getSkinnyLeaves(TREE_A, 1, 3)).to.deep.equal(leavesA.slice(1))
     })
 
     it("Should clear a tree's leaves array on reset, then rebuild with no stale leaves", async () => {
         const { contract } = await deploy()
 
-        expect(await contract.getLeaves(TREE_A, 0, leavesA.length)).to.deep.equal(leavesA)
+        expect(await contract.getSkinnyLeaves(TREE_A, 0, leavesA.length)).to.deep.equal(leavesA)
 
         await contract.reset(TREE_A)
         expect(await contract.size(TREE_A)).to.equal(0)
-        expect(await contract.getLeaves(TREE_A, 0, 0)).to.deep.equal([])
+        expect(await contract.getSkinnyLeaves(TREE_A, 0, 0)).to.deep.equal([])
 
         // Re-insert FEWER, DIFFERENT leaves. If reset had not done `delete self.leaves`, the array
         // would still hold the old leaves at index 0..1 and this would read [11, 22], not [77, 88].
         await contract.insertMany(TREE_A, [77n, 88n])
         expect(await contract.size(TREE_A)).to.equal(2)
-        expect(await contract.getLeaves(TREE_A, 0, 2)).to.deep.equal([77n, 88n])
+        expect(await contract.getSkinnyLeaves(TREE_A, 0, 2)).to.deep.equal([77n, 88n])
         // the array is exactly length 2 now: reading past it reverts
-        await expect(contract.getLeaves(TREE_A, 0, 3)).to.be.reverted
+        await expect(contract.getSkinnyLeaves(TREE_A, 0, 3)).to.be.reverted
 
         // the other tree is untouched by the reset
-        expect(await contract.getLeaves(TREE_B, 0, leavesB.length)).to.deep.equal(leavesB)
+        expect(await contract.getSkinnyLeaves(TREE_B, 0, leavesB.length)).to.deep.equal(leavesB)
     })
 
-    it("Should give each tree a distinct, non-zero leavesBaseSlot", async () => {
+    it("Should give each tree a distinct, non-zero skinnyLeavesBaseSlot", async () => {
         const { contract } = await deploy()
 
-        const slotA = await contract.leavesBaseSlot(TREE_A)
-        const slotB = await contract.leavesBaseSlot(TREE_B)
+        const slotA = await contract.skinnyLeavesBaseSlot(TREE_A)
+        const slotB = await contract.skinnyLeavesBaseSlot(TREE_B)
 
         expect(slotA).to.not.equal(0n)
         expect(slotA).to.not.equal(slotB)
@@ -104,7 +104,7 @@ describe("SkinnyIMTFullNodeReadable (multi-tree)", () => {
             [TREE_A, leavesA],
             [TREE_B, leavesB]
         ] as const) {
-            const slot = await contract.leavesBaseSlot(id)
+            const slot = await contract.skinnyLeavesBaseSlot(id)
 
             // `leaves` is the first member of SkinnyIMTDataFullNode, so the struct slot is the array header
             const length = await ethers.provider.getStorage(address, slot)
@@ -128,8 +128,14 @@ describe("SkinnyIMTFullNodeReadable (multi-tree)", () => {
         it("Should revert on every reader for a tree that was never initialized", async () => {
             const { contract } = await deploy()
 
-            await expect(contract.getLeaves(UNKNOWN, 0, 1)).to.be.revertedWithCustomError(contract, "NotInitialized")
-            await expect(contract.leavesBaseSlot(UNKNOWN)).to.be.revertedWithCustomError(contract, "NotInitialized")
+            await expect(contract.getSkinnyLeaves(UNKNOWN, 0, 1)).to.be.revertedWithCustomError(
+                contract,
+                "NotInitialized"
+            )
+            await expect(contract.skinnyLeavesBaseSlot(UNKNOWN)).to.be.revertedWithCustomError(
+                contract,
+                "NotInitialized"
+            )
         })
 
         it("Should distinguish an initialized-but-empty tree from a nonexistent one", async () => {
@@ -138,11 +144,14 @@ describe("SkinnyIMTFullNodeReadable (multi-tree)", () => {
             await contract.init(EMPTY)
 
             // initialized and empty: reads fine, returns nothing
-            expect(await contract.getLeaves(EMPTY, 0, 0)).to.deep.equal([])
-            expect(await contract.leavesBaseSlot(EMPTY)).to.not.equal(0n)
+            expect(await contract.getSkinnyLeaves(EMPTY, 0, 0)).to.deep.equal([])
+            expect(await contract.skinnyLeavesBaseSlot(EMPTY)).to.not.equal(0n)
 
             // nonexistent: rejected outright
-            await expect(contract.getLeaves(UNKNOWN, 0, 0)).to.be.revertedWithCustomError(contract, "NotInitialized")
+            await expect(contract.getSkinnyLeaves(UNKNOWN, 0, 0)).to.be.revertedWithCustomError(
+                contract,
+                "NotInitialized"
+            )
         })
     })
 
@@ -155,8 +164,8 @@ describe("SkinnyIMTFullNodeReadable (multi-tree)", () => {
         await contract.update(TREE_A, leavesA[0], 99n, 0, siblings)
         jsA.update(0, 99n)
 
-        expect(await contract.getLeaves(TREE_A, 0, 3)).to.deep.equal([99n, ...leavesA.slice(1)])
-        expect(await contract.getLeaves(TREE_B, 0, 2)).to.deep.equal(leavesB)
+        expect(await contract.getSkinnyLeaves(TREE_A, 0, 3)).to.deep.equal([99n, ...leavesA.slice(1)])
+        expect(await contract.getSkinnyLeaves(TREE_B, 0, 2)).to.deep.equal(leavesB)
         expect(await contract.root(TREE_B)).to.equal(rootBBefore)
         // tree A's contract root tracks the JS mirror after the update
         expect(await contract.root(TREE_A)).to.equal(jsA.root)

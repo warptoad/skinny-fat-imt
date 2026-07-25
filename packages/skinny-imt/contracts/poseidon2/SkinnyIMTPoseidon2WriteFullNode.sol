@@ -7,7 +7,7 @@ import {InternalSkinnyIMTStorage, SkinnyIMTDataFullNode} from "../InternalSkinny
 
 library SkinnyIMTPoseidon2WriteFullNode {
     // Kept private: only used internally as a function pointer (inlining is the optimal call path).
-    // getLeaves is intentionally NOT exposed here; inherit SkinnyIMTFullNodeReadable for that.
+    // getSkinnyLeaves is intentionally NOT exposed here; inherit SkinnyIMTFullNodeReadable for that.
     function hasher(uint256[2] memory leaves) private pure returns (uint256) {
         return LibPoseidon2Yul.hash_2(leaves[0], leaves[1]);
     }
