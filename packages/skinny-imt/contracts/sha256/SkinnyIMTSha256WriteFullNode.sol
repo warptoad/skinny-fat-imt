@@ -8,7 +8,7 @@ library SkinnyIMTSha256WriteFullNode {
     // Uses the non-field-checked (non-BN254) variants: sha256 outputs span the full uint256
     // range, so leaves and siblings are never required to be in the snark field.
     // Kept private: only used internally as a function pointer (inlining is the optimal call path).
-    // getLeaves is intentionally NOT exposed here; inherit SkinnyIMTFullNodeReadable for that.
+    // getSkinnyLeaves is intentionally NOT exposed here; inherit SkinnyIMTFullNodeReadable for that.
     function hasher(uint256[2] memory input) private pure returns (uint256) {
         return uint256(sha256(abi.encodePacked(input[0], input[1])));
     }
