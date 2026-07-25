@@ -19,9 +19,8 @@
         "merkle-tree",
         "incremental-merkle-tree"
     ],
-    "repository": "git+https://github.com/warptoad/skinny-fat-imt.git",
-    "homepage": "https://github.com/warptoad/skinny-fat-imt/tree/main/packages/fat-imt",
-    "bugs": "https://github.com/warptoad/skinny-fat-imt/issues",
+    "repository": "git@github.com:privacy-scaling-explorations/zk-kit.solidity.git",
+    "homepage": "https://github.com/privacy-scaling-explorations/zk-kit.solidity/tree/main/packages/fat-imt",
     "publishConfig": {
         "access": "public"
     },

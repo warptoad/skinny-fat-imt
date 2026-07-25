@@ -13,7 +13,7 @@ import {SkinnyIMTDataFullNode} from "../../InternalSkinnyIMTStorage.sol";
 contract SkinnyIMTPoseidon2MultiTreeTest is SkinnyIMTFullNodeReadable {
     mapping(uint256 => SkinnyIMTDataFullNode) internal trees;
 
-    function _tree(uint256 treeId) internal view override returns (SkinnyIMTDataFullNode storage) {
+    function _getSkinnyTree(uint256 treeId) internal view override returns (SkinnyIMTDataFullNode storage) {
         return trees[treeId];
     }
 

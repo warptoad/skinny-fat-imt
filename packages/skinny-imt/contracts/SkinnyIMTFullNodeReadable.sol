@@ -33,7 +33,7 @@ import {NotInitialized} from "./InternalSkinnyIMTEvent.sol";
 /// A single-tree consumer just ignores the id: `return data;`.
 abstract contract SkinnyIMTFullNodeReadable {
     /// @dev Resolves `treeId` to the consumer's tree storage. Single-tree consumers may ignore `treeId`.
-    function _tree(uint256 treeId) internal view virtual returns (SkinnyIMTDataFullNode storage);
+    function _getSkinnyTree(uint256 treeId) internal view virtual returns (SkinnyIMTDataFullNode storage);
 
     /// @dev Resolves `treeId` and rejects a tree that was never initialized. A mapping always resolves
     /// — an unwritten key yields an all-zero struct — so without this a caller asking for a tree that
@@ -41,8 +41,8 @@ abstract contract SkinnyIMTFullNodeReadable {
     /// is empty". `_init` sets `treeId` to `slot + 1`, so a zero `treeId` means uninitialized.
     /// @notice Storage cannot distinguish a never-written key from one written to zero or `delete`d,
     /// so all three surface as the same error; there is no finer distinction available to detect.
-    function _initializedTree(uint256 treeId) internal view returns (SkinnyIMTDataFullNode storage) {
-        SkinnyIMTDataFullNode storage tree = _tree(treeId);
+    function _initializedSkinnyTree(uint256 treeId) internal view returns (SkinnyIMTDataFullNode storage) {
+        SkinnyIMTDataFullNode storage tree = _getSkinnyTree(treeId);
         if (tree.treeData.treeId == 0) {
             revert NotInitialized();
         }
@@ -53,7 +53,7 @@ abstract contract SkinnyIMTFullNodeReadable {
     /// @dev Convenience reader for full nodes. Meant for off-chain `eth_call` (no gas paid); for large
     /// ranges page it, since the return array is bounded by the node's `eth_call` gas/response limits.
     function getLeaves(uint256 treeId, uint256 from, uint256 to) external view returns (uint256[] memory) {
-        return InternalSkinnyIMTStorage._getLeaves(_initializedTree(treeId), from, to);
+        return InternalSkinnyIMTStorage._getLeaves(_initializedSkinnyTree(treeId), from, to);
     }
 
     /// @notice Storage slot of tree `treeId`'s `leaves` array header, used by the skinnyfatJs lib to
@@ -62,7 +62,7 @@ abstract contract SkinnyIMTFullNodeReadable {
     /// header slot; elements start at `keccak256(slot)`. Derived from whatever `_tree` returns, so it
     /// stays correct for a mapping (`keccak256(key, mappingSlot)`) or array (`base + 6*i`) layout too.
     function leavesBaseSlot(uint256 treeId) external view returns (uint256) {
-        SkinnyIMTDataFullNode storage tree = _initializedTree(treeId);
+        SkinnyIMTDataFullNode storage tree = _initializedSkinnyTree(treeId);
         uint256 slot;
         assembly {
             slot := tree.slot
