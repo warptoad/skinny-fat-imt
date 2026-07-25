@@ -13,7 +13,7 @@ import {FatIMTDataFullNode} from "../../InternalFatIMTStorage.sol";
 contract FatIMTPoseidon2MultiTreeTest is FatIMTFullNodeReadable {
     mapping(uint256 => FatIMTDataFullNode) internal trees;
 
-    function _tree(uint256 treeId) internal view override returns (FatIMTDataFullNode storage) {
+    function _getFatTree(uint256 treeId) internal view override returns (FatIMTDataFullNode storage) {
         return trees[treeId];
     }
 

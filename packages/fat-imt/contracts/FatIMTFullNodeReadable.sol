@@ -32,7 +32,7 @@ import {NotInitialized} from "./InternalFatIMTEvent.sol";
 /// A single-tree consumer just ignores the id: `return data;`.
 abstract contract FatIMTFullNodeReadable {
     /// @dev Resolves `treeId` to the consumer's tree storage. Single-tree consumers may ignore `treeId`.
-    function _tree(uint256 treeId) internal view virtual returns (FatIMTDataFullNode storage);
+    function _getFatTree(uint256 treeId) internal view virtual returns (FatIMTDataFullNode storage);
 
     /// @dev Resolves `treeId` and rejects a tree that was never initialized. A mapping always resolves
     /// — an unwritten key yields an all-zero struct — so without this a caller asking for a tree that
@@ -40,8 +40,8 @@ abstract contract FatIMTFullNodeReadable {
     /// is empty". `_init` sets `treeId` to `slot + 1`, so a zero `treeId` means uninitialized.
     /// @notice Storage cannot distinguish a never-written key from one written to zero or `delete`d,
     /// so all three surface as the same error; there is no finer distinction available to detect.
-    function _initializedTree(uint256 treeId) internal view returns (FatIMTDataFullNode storage) {
-        FatIMTDataFullNode storage tree = _tree(treeId);
+    function _initializedFatTree(uint256 treeId) internal view returns (FatIMTDataFullNode storage) {
+        FatIMTDataFullNode storage tree = _getFatTree(treeId);
         if (tree.treeData.treeId == 0) {
             revert NotInitialized();
         }
@@ -52,7 +52,7 @@ abstract contract FatIMTFullNodeReadable {
     /// @dev Convenience reader for full nodes. Meant for off-chain `eth_call` (no gas paid); for large
     /// ranges page it, since the return array is bounded by the node's `eth_call` gas/response limits.
     function getLeaves(uint256 treeId, uint256 from, uint256 to) external view returns (uint256[] memory) {
-        return InternalFatIMTStorage._getLeaves(_initializedTree(treeId), from, to);
+        return InternalFatIMTStorage._getLeaves(_initializedFatTree(treeId), from, to);
     }
 
     /// @notice Returns tree `treeId`'s nodes at `level` in the half-open range [from, to). Level 0 is
@@ -65,7 +65,7 @@ abstract contract FatIMTFullNodeReadable {
         uint256 to,
         uint256 level
     ) external view returns (uint256[] memory) {
-        return InternalFatIMTStorage._getNodes(_initializedTree(treeId), from, to, level);
+        return InternalFatIMTStorage._getNodes(_initializedFatTree(treeId), from, to, level);
     }
 
     /// @notice Storage slot of tree `treeId`'s `leaves` array header, used by the skinnyfatJs lib to
@@ -74,7 +74,7 @@ abstract contract FatIMTFullNodeReadable {
     /// header slot; elements start at `keccak256(slot)`. Derived from whatever `_tree` returns, so it
     /// stays correct for a mapping (`keccak256(key, mappingSlot)`) or array (`base + 6*i`) layout too.
     function leavesBaseSlot(uint256 treeId) external view returns (uint256) {
-        FatIMTDataFullNode storage tree = _initializedTree(treeId);
+        FatIMTDataFullNode storage tree = _initializedFatTree(treeId);
         uint256 slot;
         assembly {
             slot := tree.slot
