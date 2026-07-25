@@ -2,7 +2,7 @@
 pragma solidity ^0.8.4;
 
 import {InternalFatIMTCore, FatIMTData, MultiProof, TreeEmpty} from "./InternalFatIMTCore.sol";
-import {NewTree, NewRoot, NewLeaf, RepeatedLeafs, UpdatedLeaf} from "./interfaces/events.sol";
+import {NewTree, TreeReset, NewRoot, NewLeaf, RepeatedLeafs, UpdatedLeaf} from "./interfaces/events.sol";
 import {_emitUpdatedMany, _requireInField, _requireAllInField} from "./FatIMTUtils.sol";
 
 error EndIndexOutOfRange();
@@ -12,6 +12,7 @@ error AlreadyInitialized();
 
 library InternalFatIMTEvent {
     function _reset(FatIMTData storage self) internal {
+        emit TreeReset(self.treeId);
         InternalFatIMTCore._reset(self);
     }
 

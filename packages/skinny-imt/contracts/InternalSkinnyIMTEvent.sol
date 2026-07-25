@@ -2,7 +2,7 @@
 pragma solidity ^0.8.4;
 
 import {InternalSkinnyIMTCore, SkinnyIMTData, MultiProof, TreeEmpty} from "./InternalSkinnyIMTCore.sol";
-import {NewTree, NewRoot, NewLeaf, RepeatedLeafs, UpdatedLeaf} from "./interfaces/events.sol";
+import {NewTree, TreeReset, NewRoot, NewLeaf, RepeatedLeafs, UpdatedLeaf} from "./interfaces/events.sol";
 import {_emitUpdatedMany, _requireInField, _requireAllInField} from "./SkinnyIMTUtils.sol";
 
 error NotInitialized();
@@ -10,6 +10,7 @@ error AlreadyInitialized();
 
 library InternalSkinnyIMTEvent {
     function _reset(SkinnyIMTData storage self) internal {
+        emit TreeReset(self.treeId);
         InternalSkinnyIMTCore._reset(self);
     }
 
