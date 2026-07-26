@@ -52,7 +52,7 @@ async function deployVersion(h: Hash, v: Version) {
         const dg = (await ethers.provider.getTransactionReceipt(contract.deploymentTransaction()!.hash))!.gasUsed
         return { contract, deployGas: dg }
     }
-    const libName = v === "Bare" ? `${P}IMT${h}Bare` : `${P}IMT${h}FullNode`
+    const libName = v === "Bare" ? `${P}IMT${h}Bare` : `${P}IMT${h}Storage`
     const contract = await deployLibAndTest(libName, await hasherLibs(h))
     const dg = (await ethers.provider.getTransactionReceipt(contract.deploymentTransaction()!.hash))!.gasUsed
     return { contract, deployGas: dg }

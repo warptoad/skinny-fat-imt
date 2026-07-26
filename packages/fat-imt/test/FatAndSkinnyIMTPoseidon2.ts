@@ -17,14 +17,14 @@ describe("Fat + Skinny IMT in one contract", () => {
         const [sender] = await ethers.getSigners()
         await deployPoseidon2(ethers.provider, sender)
 
-        const fat = await (await ethers.getContractFactory("FatIMTPoseidon2WriteFullNode")).deploy()
-        const skinny = await (await ethers.getContractFactory("SkinnyIMTPoseidon2WriteFullNode")).deploy()
+        const fat = await (await ethers.getContractFactory("FatIMTPoseidon2WriteStorage")).deploy()
+        const skinny = await (await ethers.getContractFactory("SkinnyIMTPoseidon2WriteStorage")).deploy()
 
         const contract = await (
             await ethers.getContractFactory("FatAndSkinnyIMTPoseidon2Test", {
                 libraries: {
-                    FatIMTPoseidon2WriteFullNode: await fat.getAddress(),
-                    SkinnyIMTPoseidon2WriteFullNode: await skinny.getAddress()
+                    FatIMTPoseidon2WriteStorage: await fat.getAddress(),
+                    SkinnyIMTPoseidon2WriteStorage: await skinny.getAddress()
                 }
             })
         ).deploy()
@@ -59,8 +59,8 @@ describe("Fat + Skinny IMT in one contract", () => {
     it("Should give each family's tree its own leavesBaseSlot", async () => {
         const contract = await deploy()
 
-        const fatSlot = await contract.fatLeavesBaseSlot(TREE)
-        const skinnySlot = await contract.skinnyLeavesBaseSlot(TREE)
+        const fatSlot = await contract.getFatLeavesBaseSlot(TREE)
+        const skinnySlot = await contract.getSkinnyLeavesBaseSlot(TREE)
 
         expect(fatSlot).to.not.equal(0n)
         expect(skinnySlot).to.not.equal(0n)
@@ -73,8 +73,8 @@ describe("Fat + Skinny IMT in one contract", () => {
         const address = await contract.getAddress()
 
         for (const [slot, leaves] of [
-            [await contract.fatLeavesBaseSlot(TREE), fatLeaves],
-            [await contract.skinnyLeavesBaseSlot(TREE), skinnyLeaves]
+            [await contract.getFatLeavesBaseSlot(TREE), fatLeaves],
+            [await contract.getSkinnyLeavesBaseSlot(TREE), skinnyLeaves]
         ] as const) {
             // `leaves` is the struct's first member, so the struct slot is the array header; elements
             // start at keccak256(slot) — the derivation the skinnyfatJs lib performs
@@ -87,10 +87,25 @@ describe("Fat + Skinny IMT in one contract", () => {
         }
     })
 
-    it("Should expose the fat-only node reader, which has no skinny counterpart", async () => {
+    // Each family stores its interior differently — fat materializes every node, skinny keeps only
+    // the side nodes it needs to insert — so the two readers are named apart and both stay reachable.
+    it("Should expose each family's interior reader side by side", async () => {
         const contract = await deploy()
 
         expect(await contract.getFatNodes(TREE, 0, fatLeaves.length, 0)).to.deep.equal(fatLeaves)
+
+        const skinnyDepth = await contract.getSkinnyDepth(TREE)
+        const skinnySideNodes = await contract.getSkinnySideNodes(TREE, 0, skinnyDepth + 1n)
+        expect(skinnySideNodes.length).to.equal(Number(skinnyDepth) + 1)
+    })
+
+    it("Should report each family's size and depth under the same id", async () => {
+        const contract = await deploy()
+
+        expect(await contract.getFatSize(TREE)).to.equal(fatLeaves.length)
+        expect(await contract.getSkinnySize(TREE)).to.equal(skinnyLeaves.length)
+        expect(await contract.getFatDepth(TREE)).to.equal(2)
+        expect(await contract.getSkinnyDepth(TREE)).to.equal(1)
     })
 
     it("Should revert NotInitialized per family, for an id that family never initialized", async () => {
@@ -99,7 +114,10 @@ describe("Fat + Skinny IMT in one contract", () => {
 
         await expect(contract.getFatLeaves(UNKNOWN, 0, 1)).to.be.revertedWithCustomError(contract, "NotInitialized")
         await expect(contract.getSkinnyLeaves(UNKNOWN, 0, 1)).to.be.revertedWithCustomError(contract, "NotInitialized")
-        await expect(contract.fatLeavesBaseSlot(UNKNOWN)).to.be.revertedWithCustomError(contract, "NotInitialized")
-        await expect(contract.skinnyLeavesBaseSlot(UNKNOWN)).to.be.revertedWithCustomError(contract, "NotInitialized")
+        await expect(contract.getFatLeavesBaseSlot(UNKNOWN)).to.be.revertedWithCustomError(contract, "NotInitialized")
+        await expect(contract.getSkinnyLeavesBaseSlot(UNKNOWN)).to.be.revertedWithCustomError(
+            contract,
+            "NotInitialized"
+        )
     })
 })

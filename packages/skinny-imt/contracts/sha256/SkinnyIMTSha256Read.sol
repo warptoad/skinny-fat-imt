@@ -7,7 +7,7 @@ import {TreeEmpty} from "../InternalSkinnyIMTCore.sol";
 
 /// @title SkinnyIMTSha256Read
 /// @notice Stateless proof verification (`proofToRoot` / `proofManyToRoot`) split out of
-/// `SkinnyIMTSha256WriteArchiveNode` and `SkinnyIMTSha256WriteFullNode` to keep those libraries under the
+/// `SkinnyIMTSha256WriteEvent` and `SkinnyIMTSha256WriteStorage` to keep those libraries under the
 /// EIP-170 contract size limit. Both functions take the whole proof as parameters and touch no
 /// storage, so a single library serves the plain and full-node trees alike.
 /// Uses the non-field-checked (non-BN254) proof variants: sha256 outputs span the full uint256

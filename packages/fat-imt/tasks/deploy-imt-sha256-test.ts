@@ -1,7 +1,7 @@
 import { task, types } from "hardhat/config"
 import { ethers } from "ethers"
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers"
-import { FatIMTSha256WriteArchiveNode__factory } from "../typechain-types"
+import { FatIMTSha256WriteEvent__factory } from "../typechain-types"
 
 // sha256 is a built-in EVM precompile at address 0x02 — no external deployment needed.
 export async function deploySha256(_provider: ethers.Provider, _sender: ethers.Signer | HardhatEthersSigner) {
@@ -13,9 +13,9 @@ task("deploy:imt-sha256-test", "Deploy an IMT contract for testing a library")
     .addOptionalParam<boolean>("logs", "Print the logs", true, types.boolean)
     .addOptionalParam<number>("arity", "The arity of the tree", 2, types.int)
     .setAction(async ({ logs, library: libraryName, arity }, { ethers }): Promise<any> => {
-        const LibraryFactory = (await ethers.getContractFactory(`${libraryName}WriteArchiveNode`, {
+        const LibraryFactory = (await ethers.getContractFactory(`${libraryName}WriteEvent`, {
             libraries: {}
-        })) as FatIMTSha256WriteArchiveNode__factory
+        })) as FatIMTSha256WriteEvent__factory
 
         const library = await LibraryFactory.deploy()
         const libraryAddress = await library.getAddress()
@@ -36,7 +36,7 @@ task("deploy:imt-sha256-test", "Deploy an IMT contract for testing a library")
 
         const ContractFactory = await ethers.getContractFactory(`${libraryName}Test`, {
             libraries: {
-                [`${libraryName}WriteArchiveNode`]: libraryAddress,
+                [`${libraryName}WriteEvent`]: libraryAddress,
                 [`${libraryName}Read`]: verifyLibraryAddress
             }
         })

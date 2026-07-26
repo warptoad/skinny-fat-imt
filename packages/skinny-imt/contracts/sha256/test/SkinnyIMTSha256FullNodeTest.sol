@@ -1,36 +1,36 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {SkinnyIMTSha256WriteFullNode} from "../SkinnyIMTSha256WriteFullNode.sol";
+import {SkinnyIMTSha256WriteStorage} from "../SkinnyIMTSha256WriteStorage.sol";
 import {SkinnyIMTSha256Read} from "../SkinnyIMTSha256Read.sol";
-import {SkinnyIMTDataFullNode} from "../../InternalSkinnyIMTStorage.sol";
+import {SkinnyIMTDataStorage} from "../../InternalSkinnyIMTStorage.sol";
 
-// TEST-ONLY single-tree wrapper around the FullNode lib (leaves stored in a storage array + events).
-contract SkinnyIMTSha256FullNodeTest {
-    SkinnyIMTDataFullNode internal data;
+// TEST-ONLY single-tree wrapper around the Storage lib (leaves stored in a storage array + events).
+contract SkinnyIMTSha256StorageTest {
+    SkinnyIMTDataStorage internal data;
 
     constructor() {
-        SkinnyIMTSha256WriteFullNode.init(data);
+        SkinnyIMTSha256WriteStorage.init(data);
     }
 
     function reset() external {
-        SkinnyIMTSha256WriteFullNode.reset(data);
+        SkinnyIMTSha256WriteStorage.reset(data);
     }
 
     function insert(uint256 leaf) external {
-        SkinnyIMTSha256WriteFullNode.insert(data, leaf);
+        SkinnyIMTSha256WriteStorage.insert(data, leaf);
     }
 
     function insertMany(uint256[] calldata leaves) external {
-        SkinnyIMTSha256WriteFullNode.insertMany(data, leaves);
+        SkinnyIMTSha256WriteStorage.insertMany(data, leaves);
     }
 
     function insertManyRepeated(uint256 value, uint256 amount) external {
-        SkinnyIMTSha256WriteFullNode.insertManyRepeated(data, value, amount);
+        SkinnyIMTSha256WriteStorage.insertManyRepeated(data, value, amount);
     }
 
     function update(uint256 oldLeaf, uint256 newLeaf, uint256 index, uint256[] calldata siblingNodes) external {
-        SkinnyIMTSha256WriteFullNode.update(data, oldLeaf, newLeaf, index, siblingNodes);
+        SkinnyIMTSha256WriteStorage.update(data, oldLeaf, newLeaf, index, siblingNodes);
     }
 
     function updateMany(
@@ -39,7 +39,7 @@ contract SkinnyIMTSha256FullNodeTest {
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
     ) external {
-        SkinnyIMTSha256WriteFullNode.updateMany(data, oldLeaves, newLeaves, leafIndexes, proofSiblings);
+        SkinnyIMTSha256WriteStorage.updateMany(data, oldLeaves, newLeaves, leafIndexes, proofSiblings);
     }
 
     function size() external view returns (uint256) {

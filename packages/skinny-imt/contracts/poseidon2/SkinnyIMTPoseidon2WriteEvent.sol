@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
+import {LibPoseidon2Yul} from "poseidon2-evm/src/bn254/yul/LibPoseidon2Yul.sol";
 
 import {InternalSkinnyIMTEvent} from "../InternalSkinnyIMTEvent.sol";
 import {SkinnyIMTData} from "../InternalSkinnyIMTCore.sol";
 
-library SkinnyIMTPoseidonWriteArchiveNode {
-    function hasher(uint256[2] memory input) private pure returns (uint256) {
-        return PoseidonT3.hash(input);
+library SkinnyIMTPoseidon2WriteEvent {
+    function hasher(uint256[2] memory leaves) private pure returns (uint256) {
+        return LibPoseidon2Yul.hash_2(leaves[0], leaves[1]);
     }
 
     function init(SkinnyIMTData storage self) public returns (uint256) {

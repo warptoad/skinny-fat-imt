@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.4;
 
-import {FatIMTPoseidon2WriteArchiveNode, FatIMTData} from "../FatIMTPoseidon2WriteArchiveNode.sol";
+import {FatIMTPoseidon2WriteEvent, FatIMTData} from "../FatIMTPoseidon2WriteEvent.sol";
 import {FatIMTPoseidon2Read} from "../FatIMTPoseidon2Read.sol";
 
 // verify/verifyMany are wrapped as state-changing (event-emitting) txs rather than
@@ -15,27 +15,27 @@ contract FatIMTPoseidon2Test {
     FatIMTData internal data;
 
     constructor() {
-        FatIMTPoseidon2WriteArchiveNode.init(data);
+        FatIMTPoseidon2WriteEvent.init(data);
     }
 
     function insert(uint256 leaf) external {
-        FatIMTPoseidon2WriteArchiveNode.insert(data, leaf);
+        FatIMTPoseidon2WriteEvent.insert(data, leaf);
     }
 
     function reset() external {
-        FatIMTPoseidon2WriteArchiveNode.reset(data);
+        FatIMTPoseidon2WriteEvent.reset(data);
     }
 
     function insertMany(uint256[] calldata leaves) external {
-        FatIMTPoseidon2WriteArchiveNode.insertMany(data, leaves);
+        FatIMTPoseidon2WriteEvent.insertMany(data, leaves);
     }
 
     function insertManyRepeated(uint256 value, uint256 amount) external {
-        FatIMTPoseidon2WriteArchiveNode.insertManyRepeated(data, value, amount);
+        FatIMTPoseidon2WriteEvent.insertManyRepeated(data, value, amount);
     }
 
     function precomputeRepeatedCache(uint256 value, uint256 upToLevel) external {
-        FatIMTPoseidon2WriteArchiveNode.precomputeRepeatedCache(data, value, upToLevel);
+        FatIMTPoseidon2WriteEvent.precomputeRepeatedCache(data, value, upToLevel);
     }
 
     function size() external view returns (uint256) {
@@ -47,11 +47,11 @@ contract FatIMTPoseidon2Test {
     }
 
     function update(uint256 newLeaf, uint256 index) external {
-        FatIMTPoseidon2WriteArchiveNode.update(data, newLeaf, index);
+        FatIMTPoseidon2WriteEvent.update(data, newLeaf, index);
     }
 
     function updateMany(uint256[] calldata newLeaves, uint256[] calldata leafIndexes) external {
-        FatIMTPoseidon2WriteArchiveNode.updateMany(data, newLeaves, leafIndexes);
+        FatIMTPoseidon2WriteEvent.updateMany(data, newLeaves, leafIndexes);
     }
 
     function verify(uint256 leaf, uint256 index, uint256[] calldata siblingsNodes) external returns (bool) {

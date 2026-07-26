@@ -1,40 +1,40 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {FatIMTPoseidonWriteFullNode} from "../FatIMTPoseidonWriteFullNode.sol";
+import {FatIMTPoseidonWriteStorage} from "../FatIMTPoseidonWriteStorage.sol";
 import {FatIMTPoseidonRead} from "../FatIMTPoseidonRead.sol";
-import {FatIMTDataFullNode} from "../../InternalFatIMTStorage.sol";
+import {FatIMTDataStorage} from "../../InternalFatIMTStorage.sol";
 
-// TEST-ONLY single-tree wrapper around the FullNode lib (leaves stored in a storage array + events).
-contract FatIMTPoseidonFullNodeTest {
-    FatIMTDataFullNode internal data;
+// TEST-ONLY single-tree wrapper around the Storage lib (leaves stored in a storage array + events).
+contract FatIMTPoseidonStorageTest {
+    FatIMTDataStorage internal data;
 
     constructor() {
-        FatIMTPoseidonWriteFullNode.init(data);
+        FatIMTPoseidonWriteStorage.init(data);
     }
 
     function reset() external {
-        FatIMTPoseidonWriteFullNode.reset(data);
+        FatIMTPoseidonWriteStorage.reset(data);
     }
 
     function insert(uint256 leaf) external {
-        FatIMTPoseidonWriteFullNode.insert(data, leaf);
+        FatIMTPoseidonWriteStorage.insert(data, leaf);
     }
 
     function insertMany(uint256[] calldata leaves) external {
-        FatIMTPoseidonWriteFullNode.insertMany(data, leaves);
+        FatIMTPoseidonWriteStorage.insertMany(data, leaves);
     }
 
     function insertManyRepeated(uint256 value, uint256 amount) external {
-        FatIMTPoseidonWriteFullNode.insertManyRepeated(data, value, amount);
+        FatIMTPoseidonWriteStorage.insertManyRepeated(data, value, amount);
     }
 
     function update(uint256 newLeaf, uint256 index) external {
-        FatIMTPoseidonWriteFullNode.update(data, newLeaf, index);
+        FatIMTPoseidonWriteStorage.update(data, newLeaf, index);
     }
 
     function updateMany(uint256[] calldata newLeaves, uint256[] calldata leafIndexes) external {
-        FatIMTPoseidonWriteFullNode.updateMany(data, newLeaves, leafIndexes);
+        FatIMTPoseidonWriteStorage.updateMany(data, newLeaves, leafIndexes);
     }
 
     function size() external view returns (uint256) {

@@ -1,31 +1,31 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {InternalFatIMTEvent, FatIMTData} from "./InternalFatIMTEvent.sol";
+import {InternalFatIMTEvent, FatIMTDataEvent} from "./InternalFatIMTEvent.sol";
 import {_emitUpdatedMany, _requireInField, _requireAllInField} from "./FatIMTUtils.sol";
 
 // added storage of the leaves to allow syncing with full nodes for leaves older then 1 year
-struct FatIMTDataFullNode {
+struct FatIMTDataStorage {
     // arrays cost more but store in consecutive slots which allows for usage of debug_storageRangeAt
     // to read this extremely fast
     uint256[] leaves;
-    FatIMTData treeData;
+    FatIMTDataEvent treeData;
 }
 
 library InternalFatIMTStorage {
-    function _reset(FatIMTDataFullNode storage self) internal {
-        // the FullNode variant also stores leaves in a pushed array, so it must be cleared here;
+    function _reset(FatIMTDataStorage storage self) internal {
+        // the Storage variant also stores leaves in a pushed array, so it must be cleared here;
         // InternalFatIMTEvent._reset only zeroes size/depth in the core.
         delete self.leaves;
         InternalFatIMTEvent._reset(self.treeData);
     }
 
     /// helper function for clients that don't have debug_storageRangeAt
-    /// @param self: A storage reference to the 'FatIMTDataFullNode' struct.
+    /// @param self: A storage reference to the 'FatIMTDataStorage' struct.
     /// @param firstIndex: first leaf index to get (inclusive)
     /// @param endIndex: last leaf index to stop retrieving at (exclusive)
     function _getLeaves(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256 firstIndex,
         uint256 endIndex
     ) internal view returns (uint256[] memory) {
@@ -37,7 +37,7 @@ library InternalFatIMTStorage {
     }
 
     function _getNodes(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256 firstIndex,
         uint256 endIndex,
         uint256 level
@@ -45,12 +45,20 @@ library InternalFatIMTStorage {
         return InternalFatIMTEvent._getNodes(self.treeData, firstIndex, endIndex, level);
     }
 
-    function _init(FatIMTDataFullNode storage self) internal returns (uint256) {
+    function _getRepeatedHashes(
+        FatIMTDataStorage storage self,
+        uint256 firstIndex,
+        uint256 endIndex
+    ) internal view returns (uint256[] memory) {
+        return InternalFatIMTEvent._getRepeatedHashes(self.treeData, firstIndex, endIndex);
+    }
+
+    function _init(FatIMTDataStorage storage self) internal returns (uint256) {
         return InternalFatIMTEvent._init(self.treeData);
     }
 
     function _insert(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256 leaf,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256) {
@@ -59,7 +67,7 @@ library InternalFatIMTStorage {
     }
 
     function _insertBN254(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256 leaf,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256) {
@@ -68,7 +76,7 @@ library InternalFatIMTStorage {
     }
 
     function _insertMany(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256[] calldata leaves,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
@@ -79,7 +87,7 @@ library InternalFatIMTStorage {
     }
 
     function _insertManyBN254(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256[] calldata leaves,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
@@ -90,7 +98,7 @@ library InternalFatIMTStorage {
     }
 
     function _insertManyRepeated(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256 value,
         uint256 amount,
         function(uint256[2] memory) view returns (uint256) hasher
@@ -103,7 +111,7 @@ library InternalFatIMTStorage {
     }
 
     function _insertManyRepeatedBN254(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256 value,
         uint256 amount,
         function(uint256[2] memory) view returns (uint256) hasher
@@ -116,7 +124,7 @@ library InternalFatIMTStorage {
     }
 
     function _precomputeRepeatedCache(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256 value,
         uint256 upToLevel,
         function(uint256[2] memory) view returns (uint256) hasher
@@ -125,7 +133,7 @@ library InternalFatIMTStorage {
     }
 
     function _precomputeRepeatedCacheBN254(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256 value,
         uint256 upToLevel,
         function(uint256[2] memory) view returns (uint256) hasher
@@ -134,7 +142,7 @@ library InternalFatIMTStorage {
     }
 
     function _update(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256 newLeaf,
         uint256 leafIndex,
         function(uint256[2] memory) view returns (uint256) hasher
@@ -144,7 +152,7 @@ library InternalFatIMTStorage {
     }
 
     function _updateBN254(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256 newLeaf,
         uint256 leafIndex,
         function(uint256[2] memory) view returns (uint256) hasher
@@ -154,7 +162,7 @@ library InternalFatIMTStorage {
     }
 
     function _updateMany(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256[] calldata newLeaves,
         uint256[] calldata leafIndexes,
         function(uint256[2] memory) view returns (uint256) hasher
@@ -166,7 +174,7 @@ library InternalFatIMTStorage {
     }
 
     function _updateManyBN254(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256[] calldata newLeaves,
         uint256[] calldata leafIndexes,
         function(uint256[2] memory) view returns (uint256) hasher
@@ -177,7 +185,7 @@ library InternalFatIMTStorage {
         return InternalFatIMTEvent._updateManyBN254(self.treeData, newLeaves, leafIndexes, hasher);
     }
 
-    function _root(FatIMTDataFullNode storage self) internal view returns (uint256) {
+    function _root(FatIMTDataStorage storage self) internal view returns (uint256) {
         return InternalFatIMTEvent._root(self.treeData);
     }
 

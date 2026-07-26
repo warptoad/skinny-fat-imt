@@ -1,6 +1,6 @@
 {
     "name": "@warptoad/skinny-imt.sol",
-    "version": "0.0.4",
+    "version": "0.0.6",
     "description": "Incremental merkle tree, with a lean structure and optimized storage of side nodes in solidity.",
     "license": "MIT",
     "files": [

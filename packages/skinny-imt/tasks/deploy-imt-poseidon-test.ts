@@ -3,7 +3,7 @@ import poseidonSolidity from "poseidon-solidity"
 import { proxy } from "poseidon-solidity"
 import { ethers } from "ethers"
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers"
-import { SkinnyIMTPoseidon2Test__factory, SkinnyIMTPoseidonWriteArchiveNode__factory } from "../typechain-types"
+import { SkinnyIMTPoseidon2Test__factory, SkinnyIMTPoseidonWriteEvent__factory } from "../typechain-types"
 
 // based of: https://github.com/chancehudson/poseidon-solidity?tab=readme-ov-file#deploy
 export async function deployPoseidon(
@@ -51,11 +51,11 @@ task("deploy:imt-poseidon-test", "Deploy an IMT contract for testing a library")
             console.info(`PoseidonT${arity + 1} library has been deployed to: ${poseidonAddress}`)
         }
 
-        const LibraryFactory = (await ethers.getContractFactory(`${libraryName}WriteArchiveNode`, {
+        const LibraryFactory = (await ethers.getContractFactory(`${libraryName}WriteEvent`, {
             libraries: {
                 [`PoseidonT${arity + 1}`]: poseidonAddress
             }
-        })) as SkinnyIMTPoseidonWriteArchiveNode__factory
+        })) as SkinnyIMTPoseidonWriteEvent__factory
 
         const library = await LibraryFactory.deploy()
         const libraryAddress = await library.getAddress()
@@ -80,7 +80,7 @@ task("deploy:imt-poseidon-test", "Deploy an IMT contract for testing a library")
 
         const ContractFactory = await ethers.getContractFactory(`${libraryName}Test`, {
             libraries: {
-                [`${libraryName}WriteArchiveNode`]: libraryAddress,
+                [`${libraryName}WriteEvent`]: libraryAddress,
                 [`${libraryName}Read`]: verifyLibraryAddress,
                 // precomputeRepeatedCache is an internal lib fn, so it inlines into the test contract and
                 // pulls in a direct PoseidonT3 reference that must be linked here too (poseidon only).
