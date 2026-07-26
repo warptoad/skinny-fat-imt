@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.4;
 
-import {SkinnyIMTPoseidon2WriteEvent, SkinnyIMTData} from "../SkinnyIMTPoseidon2WriteEvent.sol";
+import {SkinnyIMTPoseidon2WriteEvent, SkinnyIMTDataEvent} from "../SkinnyIMTPoseidon2WriteEvent.sol";
 import {SkinnyIMTPoseidon2Read} from "../SkinnyIMTPoseidon2Read.sol";
 
 // verify/verifyMany are wrapped as state-changing (event-emitting) txs rather than
@@ -12,7 +12,7 @@ event VerifyResult(bool result);
 event VerifyManyResult(bool result);
 
 contract SkinnyIMTPoseidon2Test {
-    SkinnyIMTData internal data;
+    SkinnyIMTDataEvent internal data;
 
     constructor() {
         SkinnyIMTPoseidon2WriteEvent.init(data);

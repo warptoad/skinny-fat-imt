@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {InternalSkinnyIMTEvent} from "../InternalSkinnyIMTEvent.sol";
-import {SkinnyIMTData} from "../InternalSkinnyIMTCore.sol";
+import {InternalSkinnyIMTEvent, SkinnyIMTDataEvent} from "../InternalSkinnyIMTEvent.sol";
 import {TreeEmpty} from "../InternalSkinnyIMTCore.sol";
 
 /// @title SkinnyIMTSha256Read
@@ -17,7 +16,7 @@ library SkinnyIMTSha256Read {
         return uint256(sha256(abi.encodePacked(input[0], input[1])));
     }
 
-    function root(SkinnyIMTData storage self) public view returns (uint256) {
+    function root(SkinnyIMTDataEvent storage self) public view returns (uint256) {
         return InternalSkinnyIMTEvent._root(self);
     }
 
@@ -42,7 +41,7 @@ library SkinnyIMTSha256Read {
     }
 
     function verify(
-        SkinnyIMTData storage self,
+        SkinnyIMTDataEvent storage self,
         uint256 leaf,
         uint256 leafIndex,
         uint256[] calldata proofSiblings
@@ -63,7 +62,7 @@ library SkinnyIMTSha256Read {
     }
 
     function verifyMany(
-        SkinnyIMTData storage self,
+        SkinnyIMTDataEvent storage self,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings

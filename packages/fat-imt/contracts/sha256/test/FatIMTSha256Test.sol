@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.4;
 
-import {FatIMTSha256WriteEvent, FatIMTData} from "../FatIMTSha256WriteEvent.sol";
+import {FatIMTSha256WriteEvent, FatIMTDataEvent} from "../FatIMTSha256WriteEvent.sol";
 import {FatIMTSha256Read} from "../FatIMTSha256Read.sol";
 
 // verify/verifyMany are wrapped as state-changing (event-emitting) txs rather than
@@ -12,7 +12,7 @@ event VerifyResult(bool result);
 event VerifyManyResult(bool result);
 
 contract FatIMTSha256Test {
-    FatIMTData internal data;
+    FatIMTDataEvent internal data;
 
     constructor() {
         FatIMTSha256WriteEvent.init(data);

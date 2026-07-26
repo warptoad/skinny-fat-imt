@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.4;
 
-import {FatIMTPoseidon2WriteEvent, FatIMTData} from "../FatIMTPoseidon2WriteEvent.sol";
+import {FatIMTPoseidon2WriteEvent, FatIMTDataEvent} from "../FatIMTPoseidon2WriteEvent.sol";
 import {FatIMTPoseidon2Read} from "../FatIMTPoseidon2Read.sol";
 
 // verify/verifyMany are wrapped as state-changing (event-emitting) txs rather than
@@ -12,7 +12,7 @@ event VerifyResult(bool result);
 event VerifyManyResult(bool result);
 
 contract FatIMTPoseidon2Test {
-    FatIMTData internal data;
+    FatIMTDataEvent internal data;
 
     constructor() {
         FatIMTPoseidon2WriteEvent.init(data);

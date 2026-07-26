@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {InternalFatIMTEvent} from "../InternalFatIMTEvent.sol";
-import {FatIMTData} from "../InternalFatIMTCore.sol";
+import {InternalFatIMTEvent, FatIMTDataEvent} from "../InternalFatIMTEvent.sol";
 import {TreeEmpty} from "../InternalFatIMTCore.sol";
 import {InternalFatIMTStorage, FatIMTDataStorage} from "../InternalFatIMTStorage.sol";
 
@@ -18,16 +17,16 @@ library FatIMTSha256Read {
         return uint256(sha256(abi.encodePacked(input[0], input[1])));
     }
 
-    function root(FatIMTData storage self) public view returns (uint256) {
+    function root(FatIMTDataEvent storage self) public view returns (uint256) {
         return InternalFatIMTEvent._root(self);
     }
 
-    /// @notice Batch node getter. Reads the `nodes` mapping, which lives in `FatIMTData` for both the
+    /// @notice Batch node getter. Reads the `nodes` mapping, which lives in `FatIMTDataEvent` for both the
     /// plain and full-node trees — a full-node caller passes its `.treeData`. Hosted here (rather
     /// than in the two wrapper libraries) to keep them under the EIP-170 size limit. set level 0 to
     /// get the leaves.
     function getNodes(
-        FatIMTData storage self,
+        FatIMTDataEvent storage self,
         uint256 firstIndex,
         uint256 endIndex,
         uint256 level
@@ -38,7 +37,7 @@ library FatIMTSha256Read {
     /// @notice Leaf getter for the plain/archive tree: its leaves live in the `nodes` mapping at
     /// level 0, so this is `getNodes(self, ..., 0)`.
     function getLeaves(
-        FatIMTData storage self,
+        FatIMTDataEvent storage self,
         uint256 firstIndex,
         uint256 endIndex
     ) public view returns (uint256[] memory) {
@@ -76,7 +75,7 @@ library FatIMTSha256Read {
     }
 
     function verify(
-        FatIMTData storage self,
+        FatIMTDataEvent storage self,
         uint256 leaf,
         uint256 leafIndex,
         uint256[] calldata proofSiblings
@@ -97,7 +96,7 @@ library FatIMTSha256Read {
     }
 
     function verifyMany(
-        FatIMTData storage self,
+        FatIMTDataEvent storage self,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings

@@ -2,7 +2,6 @@
 pragma solidity ^0.8.4;
 
 import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
-
 import {InternalSkinnyIMTStorage, SkinnyIMTDataStorage} from "../InternalSkinnyIMTStorage.sol";
 
 library SkinnyIMTPoseidonWriteStorage {
