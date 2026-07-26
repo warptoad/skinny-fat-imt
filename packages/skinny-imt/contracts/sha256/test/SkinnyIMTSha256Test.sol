@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.4;
 
-import {SkinnyIMTSha256WriteEvent, SkinnyIMTData} from "../SkinnyIMTSha256WriteEvent.sol";
+import {SkinnyIMTSha256WriteEvent, SkinnyIMTDataEvent} from "../SkinnyIMTSha256WriteEvent.sol";
 import {SkinnyIMTSha256Read} from "../SkinnyIMTSha256Read.sol";
 
 // verify/verifyMany are wrapped as state-changing (event-emitting) txs rather than
@@ -12,7 +12,7 @@ event VerifyResult(bool result);
 event VerifyManyResult(bool result);
 
 contract SkinnyIMTSha256Test {
-    SkinnyIMTData internal data;
+    SkinnyIMTDataEvent internal data;
 
     constructor() {
         SkinnyIMTSha256WriteEvent.init(data);

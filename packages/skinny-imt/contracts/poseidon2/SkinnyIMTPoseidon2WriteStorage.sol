@@ -2,7 +2,6 @@
 pragma solidity ^0.8.4;
 
 import {LibPoseidon2Yul} from "poseidon2-evm/src/bn254/yul/LibPoseidon2Yul.sol";
-
 import {InternalSkinnyIMTStorage, SkinnyIMTDataStorage} from "../InternalSkinnyIMTStorage.sol";
 
 library SkinnyIMTPoseidon2WriteStorage {

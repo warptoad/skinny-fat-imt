@@ -3,8 +3,7 @@ pragma solidity ^0.8.4;
 
 import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
 
-import {InternalSkinnyIMTEvent} from "../InternalSkinnyIMTEvent.sol";
-import {SkinnyIMTData} from "../InternalSkinnyIMTCore.sol";
+import {InternalSkinnyIMTEvent, SkinnyIMTDataEvent} from "../InternalSkinnyIMTEvent.sol";
 import {TreeEmpty} from "../InternalSkinnyIMTCore.sol";
 
 /// @title SkinnyIMTPoseidonRead
@@ -17,7 +16,7 @@ library SkinnyIMTPoseidonRead {
         return PoseidonT3.hash(input);
     }
 
-    function root(SkinnyIMTData storage self) public view returns (uint256) {
+    function root(SkinnyIMTDataEvent storage self) public view returns (uint256) {
         return InternalSkinnyIMTEvent._root(self);
     }
 
@@ -50,7 +49,7 @@ library SkinnyIMTPoseidonRead {
     }
 
     function verify(
-        SkinnyIMTData storage self,
+        SkinnyIMTDataEvent storage self,
         uint256 leaf,
         uint256 leafIndex,
         uint256[] calldata proofSiblings
@@ -71,7 +70,7 @@ library SkinnyIMTPoseidonRead {
     }
 
     function verifyMany(
-        SkinnyIMTData storage self,
+        SkinnyIMTDataEvent storage self,
         uint256[] calldata leaves,
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
