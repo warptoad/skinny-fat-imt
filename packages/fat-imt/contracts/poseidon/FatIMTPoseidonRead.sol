@@ -6,11 +6,11 @@ import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
 import {InternalFatIMTEvent} from "../InternalFatIMTEvent.sol";
 import {FatIMTData} from "../InternalFatIMTCore.sol";
 import {TreeEmpty} from "../InternalFatIMTCore.sol";
-import {InternalFatIMTStorage, FatIMTDataFullNode} from "../InternalFatIMTStorage.sol";
+import {InternalFatIMTStorage, FatIMTDataStorage} from "../InternalFatIMTStorage.sol";
 
 /// @title FatIMTPoseidonRead
 /// @notice Stateless proof verification (`proofToRoot` / `proofManyToRoot`) split out of
-/// `FatIMTPoseidonWriteArchiveNode` and `FatIMTPoseidonWriteFullNode` to keep those libraries under the
+/// `FatIMTPoseidonWriteEvent` and `FatIMTPoseidonWriteStorage` to keep those libraries under the
 /// EIP-170 contract size limit. Both functions take the whole proof as parameters and touch no
 /// storage, so a single library serves the plain and full-node trees alike.
 library FatIMTPoseidonRead {
@@ -48,7 +48,7 @@ library FatIMTPoseidonRead {
     /// @notice Leaf getter for the full-node tree: reads its dedicated `leaves` array (consecutive
     /// storage slots, fast via debug_storageRangeAt). Pass the whole full-node struct, not `.treeData`.
     function getLeaves(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256 firstIndex,
         uint256 endIndex
     ) public view returns (uint256[] memory) {

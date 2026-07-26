@@ -9,7 +9,7 @@ import {TreeEmpty} from "../InternalSkinnyIMTCore.sol";
 
 /// @title SkinnyIMTPoseidonRead
 /// @notice Stateless proof verification (`proofToRoot` / `proofManyToRoot`) split out of
-/// `SkinnyIMTPoseidonWriteArchiveNode` and `SkinnyIMTPoseidonWriteFullNode` to keep those libraries under the
+/// `SkinnyIMTPoseidonWriteEvent` and `SkinnyIMTPoseidonWriteStorage` to keep those libraries under the
 /// EIP-170 contract size limit. Both functions take the whole proof as parameters and touch no
 /// storage, so a single library serves the plain and full-node trees alike.
 library SkinnyIMTPoseidonRead {

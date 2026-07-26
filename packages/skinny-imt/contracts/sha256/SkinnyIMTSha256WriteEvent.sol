@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {LibPoseidon2Yul} from "poseidon2-evm/src/bn254/yul/LibPoseidon2Yul.sol";
-
 import {InternalSkinnyIMTEvent} from "../InternalSkinnyIMTEvent.sol";
 import {SkinnyIMTData} from "../InternalSkinnyIMTCore.sol";
 
-library SkinnyIMTPoseidon2WriteArchiveNode {
-    function hasher(uint256[2] memory leaves) private pure returns (uint256) {
-        return LibPoseidon2Yul.hash_2(leaves[0], leaves[1]);
+library SkinnyIMTSha256WriteEvent {
+    // sha256 is a built-in precompile (address 0x02); no external deployment needed.
+    // These trees use the non-field-checked (non-BN254) variants: sha256 outputs span the
+    // full uint256 range, so leaves and siblings are never required to be in the snark field.
+    function hasher(uint256[2] memory input) private pure returns (uint256) {
+        return uint256(sha256(abi.encodePacked(input[0], input[1])));
     }
 
     function init(SkinnyIMTData storage self) public returns (uint256) {
@@ -20,14 +21,14 @@ library SkinnyIMTPoseidon2WriteArchiveNode {
     }
 
     function insert(SkinnyIMTData storage self, uint256 leaf) public returns (uint256, uint256) {
-        return InternalSkinnyIMTEvent._insertBN254(self, leaf, hasher);
+        return InternalSkinnyIMTEvent._insert(self, leaf, hasher);
     }
 
     function insertMany(
         SkinnyIMTData storage self,
         uint256[] calldata leaves
     ) public returns (uint256, uint256, uint256) {
-        return InternalSkinnyIMTEvent._insertManyBN254(self, leaves, hasher);
+        return InternalSkinnyIMTEvent._insertMany(self, leaves, hasher);
     }
 
     function insertManyRepeated(
@@ -35,11 +36,11 @@ library SkinnyIMTPoseidon2WriteArchiveNode {
         uint256 value,
         uint256 amount
     ) public returns (uint256, uint256, uint256) {
-        return InternalSkinnyIMTEvent._insertManyRepeatedBN254(self, value, amount, hasher);
+        return InternalSkinnyIMTEvent._insertManyRepeated(self, value, amount, hasher);
     }
 
     function precomputeRepeatedCache(SkinnyIMTData storage self, uint256 value, uint256 upToLevel) internal {
-        return InternalSkinnyIMTEvent._precomputeRepeatedCacheBN254(self, value, upToLevel, hasher);
+        return InternalSkinnyIMTEvent._precomputeRepeatedCache(self, value, upToLevel, hasher);
     }
 
     function update(
@@ -49,7 +50,7 @@ library SkinnyIMTPoseidon2WriteArchiveNode {
         uint256 leafIndex,
         uint256[] calldata proofSiblings
     ) public returns (uint256) {
-        return InternalSkinnyIMTEvent._updateBN254(self, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
+        return InternalSkinnyIMTEvent._update(self, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
     }
 
     function updateMany(
@@ -59,6 +60,6 @@ library SkinnyIMTPoseidon2WriteArchiveNode {
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
     ) public returns (uint256) {
-        return InternalSkinnyIMTEvent._updateManyBN254(self, oldLeaves, newLeaves, leafIndexes, proofSiblings, hasher);
+        return InternalSkinnyIMTEvent._updateMany(self, oldLeaves, newLeaves, leafIndexes, proofSiblings, hasher);
     }
 }

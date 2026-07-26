@@ -4,7 +4,7 @@ pragma solidity ^0.8.4;
 import {InternalFatIMTEvent} from "../InternalFatIMTEvent.sol";
 import {FatIMTData} from "../InternalFatIMTCore.sol";
 
-library FatIMTSha256WriteArchiveNode {
+library FatIMTSha256WriteEvent {
     // sha256 is a built-in precompile (address 0x02); no external deployment needed.
     // These trees use the non-field-checked (non-BN254) variants: sha256 outputs span the
     // full uint256 range, so leaves and siblings are never required to be in the snark field.

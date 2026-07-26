@@ -6,7 +6,7 @@ import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
 import {InternalFatIMTEvent} from "../InternalFatIMTEvent.sol";
 import {FatIMTData} from "../InternalFatIMTCore.sol";
 
-library FatIMTPoseidonWriteArchiveNode {
+library FatIMTPoseidonWriteEvent {
     function hasher(uint256[2] memory input) internal pure returns (uint256) {
         return PoseidonT3.hash(input);
     }

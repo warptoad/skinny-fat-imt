@@ -1,32 +1,32 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {InternalSkinnyIMTEvent, SkinnyIMTData} from "./InternalSkinnyIMTEvent.sol";
+import {InternalSkinnyIMTEvent, SkinnyIMTDataEvent} from "./InternalSkinnyIMTEvent.sol";
 import {NewLeaf} from "./interfaces/events.sol";
 import {_emitUpdatedMany, _requireInField, _requireAllInField} from "./SkinnyIMTUtils.sol";
 
 // added storage of the leaves to allow syncing with full nodes for leaves older then 1 year
-struct SkinnyIMTDataFullNode {
+struct SkinnyIMTDataStorage {
     // arrays cost more but store in consecutive slots which allows for usage of debug_storageRangeAt
     // to read this extremely fast
     uint256[] leaves;
-    SkinnyIMTData treeData;
+    SkinnyIMTDataEvent treeData;
 }
 
 library InternalSkinnyIMTStorage {
-    function _reset(SkinnyIMTDataFullNode storage self) internal {
-        // the FullNode variant also stores leaves in a pushed array, so it must be cleared here;
+    function _reset(SkinnyIMTDataStorage storage self) internal {
+        // the Storage variant also stores leaves in a pushed array, so it must be cleared here;
         // InternalSkinnyIMTEvent._reset only zeroes size/depth in the core.
         delete self.leaves;
         InternalSkinnyIMTEvent._reset(self.treeData);
     }
 
     /// helper function for clients that don't have debug_storageRangeAt
-    /// @param self: A storage reference to the 'SkinnyIMTDataFullNode' struct.
+    /// @param self: A storage reference to the 'SkinnyIMTDataStorage' struct.
     /// @param firstIndex: first leaf index to get (inclusive)
     /// @param endIndex: last leaf index to stop retrieving at (exclusive)
     function _getLeaves(
-        SkinnyIMTDataFullNode storage self,
+        SkinnyIMTDataStorage storage self,
         uint256 firstIndex,
         uint256 endIndex
     ) internal view returns (uint256[] memory) {
@@ -37,12 +37,28 @@ library InternalSkinnyIMTStorage {
         return leaves;
     }
 
-    function _init(SkinnyIMTDataFullNode storage self) internal returns (uint256) {
+    function _getSideNodes(
+        SkinnyIMTDataStorage storage self,
+        uint256 firstIndex,
+        uint256 endIndex
+    ) internal view returns (uint256[] memory) {
+        return InternalSkinnyIMTEvent._getSideNodes(self.treeData, firstIndex, endIndex);
+    }
+
+    function _getRepeatedHashes(
+        SkinnyIMTDataStorage storage self,
+        uint256 firstIndex,
+        uint256 endIndex
+    ) internal view returns (uint256[] memory) {
+        return InternalSkinnyIMTEvent._getRepeatedHashes(self.treeData, firstIndex, endIndex);
+    }
+
+    function _init(SkinnyIMTDataStorage storage self) internal returns (uint256) {
         return InternalSkinnyIMTEvent._init(self.treeData);
     }
 
     function _insert(
-        SkinnyIMTDataFullNode storage self,
+        SkinnyIMTDataStorage storage self,
         uint256 leaf,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256) {
@@ -51,7 +67,7 @@ library InternalSkinnyIMTStorage {
     }
 
     function _insertBN254(
-        SkinnyIMTDataFullNode storage self,
+        SkinnyIMTDataStorage storage self,
         uint256 leaf,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256) {
@@ -60,7 +76,7 @@ library InternalSkinnyIMTStorage {
     }
 
     function _insertMany(
-        SkinnyIMTDataFullNode storage self,
+        SkinnyIMTDataStorage storage self,
         uint256[] calldata leaves,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
@@ -71,7 +87,7 @@ library InternalSkinnyIMTStorage {
     }
 
     function _insertManyBN254(
-        SkinnyIMTDataFullNode storage self,
+        SkinnyIMTDataStorage storage self,
         uint256[] calldata leaves,
         function(uint256[2] memory) view returns (uint256) hasher
     ) internal returns (uint256, uint256, uint256) {
@@ -82,7 +98,7 @@ library InternalSkinnyIMTStorage {
     }
 
     function _insertManyRepeated(
-        SkinnyIMTDataFullNode storage self,
+        SkinnyIMTDataStorage storage self,
         uint256 value,
         uint256 amount,
         function(uint256[2] memory) view returns (uint256) hasher
@@ -96,7 +112,7 @@ library InternalSkinnyIMTStorage {
     }
 
     function _insertManyRepeatedBN254(
-        SkinnyIMTDataFullNode storage self,
+        SkinnyIMTDataStorage storage self,
         uint256 value,
         uint256 amount,
         function(uint256[2] memory) view returns (uint256) hasher
@@ -110,7 +126,7 @@ library InternalSkinnyIMTStorage {
     }
 
     function _precomputeRepeatedCache(
-        SkinnyIMTDataFullNode storage self,
+        SkinnyIMTDataStorage storage self,
         uint256 value,
         uint256 upToLevel,
         function(uint256[2] memory) view returns (uint256) hasher
@@ -119,7 +135,7 @@ library InternalSkinnyIMTStorage {
     }
 
     function _precomputeRepeatedCacheBN254(
-        SkinnyIMTDataFullNode storage self,
+        SkinnyIMTDataStorage storage self,
         uint256 value,
         uint256 upToLevel,
         function(uint256[2] memory) view returns (uint256) hasher
@@ -128,7 +144,7 @@ library InternalSkinnyIMTStorage {
     }
 
     function _update(
-        SkinnyIMTDataFullNode storage self,
+        SkinnyIMTDataStorage storage self,
         uint256 oldLeaf,
         uint256 newLeaf,
         uint256 leafIndex,
@@ -140,7 +156,7 @@ library InternalSkinnyIMTStorage {
     }
 
     function _updateBN254(
-        SkinnyIMTDataFullNode storage self,
+        SkinnyIMTDataStorage storage self,
         uint256 oldLeaf,
         uint256 newLeaf,
         uint256 leafIndex,
@@ -152,7 +168,7 @@ library InternalSkinnyIMTStorage {
     }
 
     function _updateMany(
-        SkinnyIMTDataFullNode storage self,
+        SkinnyIMTDataStorage storage self,
         uint256[] calldata oldLeaves,
         uint256[] calldata newLeaves,
         uint256[] calldata leafIndexes,
@@ -167,7 +183,7 @@ library InternalSkinnyIMTStorage {
     }
 
     function _updateManyBN254(
-        SkinnyIMTDataFullNode storage self,
+        SkinnyIMTDataStorage storage self,
         uint256[] calldata oldLeaves,
         uint256[] calldata newLeaves,
         uint256[] calldata leafIndexes,
@@ -188,7 +204,7 @@ library InternalSkinnyIMTStorage {
             );
     }
 
-    function _root(SkinnyIMTDataFullNode storage self) internal view returns (uint256) {
+    function _root(SkinnyIMTDataStorage storage self) internal view returns (uint256) {
         return InternalSkinnyIMTEvent._root(self.treeData);
     }
 

@@ -7,11 +7,11 @@ import { ethers } from "hardhat"
 // already imported by hardhat.config.ts; re-importing just reuses the module for its helper
 import { deployPoseidon2 } from "../tasks/deploy-imt-poseidon2-test"
 
-// SkinnyIMTFullNodeReadable takes the tree as an input (treeId -> `_tree`) rather than assuming a
+// SkinnyIMTReadableStorage takes the tree as an input (treeId -> `_tree`) rather than assuming a
 // single tree at a fixed slot. These tests pin that down against a mapping layout, where every tree
-// lives at a keccak-derived slot: the readers must stay per-tree, and `skinnyLeavesBaseSlot` must point at
+// lives at a keccak-derived slot: the readers must stay per-tree, and `getSkinnyLeavesBaseSlot` must point at
 // the slot the skinnyfatJs lib would actually read from.
-describe("SkinnyIMTFullNodeReadable (multi-tree)", () => {
+describe("SkinnyIMTReadableStorage (multi-tree)", () => {
     const hash = (a: bigint, b: bigint) => poseidon2Hash([a, b])
     const TREE_A = 1n
     const TREE_B = 2n
@@ -23,8 +23,8 @@ describe("SkinnyIMTFullNodeReadable (multi-tree)", () => {
         const [sender] = await ethers.getSigners()
         await deployPoseidon2(ethers.provider, sender)
 
-        const fullNode = await (
-            await ethers.getContractFactory("SkinnyIMTPoseidon2WriteFullNode", { libraries: {} })
+        const Storage = await (
+            await ethers.getContractFactory("SkinnyIMTPoseidon2WriteStorage", { libraries: {} })
         ).deploy()
 
         // root() moved to the Read library, which MultiTreeTest now calls, so it must be linked too.
@@ -33,7 +33,7 @@ describe("SkinnyIMTFullNodeReadable (multi-tree)", () => {
         const contract = await (
             await ethers.getContractFactory("SkinnyIMTPoseidon2MultiTreeTest", {
                 libraries: {
-                    SkinnyIMTPoseidon2WriteFullNode: await fullNode.getAddress(),
+                    SkinnyIMTPoseidon2WriteStorage: await Storage.getAddress(),
                     SkinnyIMTPoseidon2Read: await read.getAddress()
                 }
             })
@@ -83,11 +83,37 @@ describe("SkinnyIMTFullNodeReadable (multi-tree)", () => {
         expect(await contract.getSkinnyLeaves(TREE_B, 0, leavesB.length)).to.deep.equal(leavesB)
     })
 
-    it("Should give each tree a distinct, non-zero skinnyLeavesBaseSlot", async () => {
+    it("Should report each tree's own size and depth", async () => {
         const { contract } = await deploy()
 
-        const slotA = await contract.skinnyLeavesBaseSlot(TREE_A)
-        const slotB = await contract.skinnyLeavesBaseSlot(TREE_B)
+        // 3 leaves need a depth-2 tree, 2 leaves only a depth-1 one
+        expect(await contract.getSkinnySize(TREE_A)).to.equal(leavesA.length)
+        expect(await contract.getSkinnyDepth(TREE_A)).to.equal(2)
+        expect(await contract.getSkinnySize(TREE_B)).to.equal(leavesB.length)
+        expect(await contract.getSkinnyDepth(TREE_B)).to.equal(1)
+    })
+
+    // The side nodes are the only thing the skinny tree keeps besides its leaves, so a client
+    // resyncing one reads them through here. The top one (at `depth`) is what `root` returns, and
+    // level 0 holds the last leaf left waiting for a partner.
+    it("Should read each tree's side nodes independently", async () => {
+        const { contract } = await deploy()
+
+        const sideNodesA = await contract.getSkinnySideNodes(TREE_A, 0, 3)
+        expect(sideNodesA.length).to.equal(3)
+        expect(sideNodesA[0]).to.equal(leavesA[2])
+        expect(sideNodesA[2]).to.equal(await contract.root(TREE_A))
+
+        // tree B is only depth 1, and its two leaves already paired up, so its top side node is the root
+        const sideNodesB = await contract.getSkinnySideNodes(TREE_B, 0, 2)
+        expect(sideNodesB[1]).to.equal(await contract.root(TREE_B))
+    })
+
+    it("Should give each tree a distinct, non-zero getSkinnyLeavesBaseSlot", async () => {
+        const { contract } = await deploy()
+
+        const slotA = await contract.getSkinnyLeavesBaseSlot(TREE_A)
+        const slotB = await contract.getSkinnyLeavesBaseSlot(TREE_B)
 
         expect(slotA).to.not.equal(0n)
         expect(slotA).to.not.equal(slotB)
@@ -104,9 +130,9 @@ describe("SkinnyIMTFullNodeReadable (multi-tree)", () => {
             [TREE_A, leavesA],
             [TREE_B, leavesB]
         ] as const) {
-            const slot = await contract.skinnyLeavesBaseSlot(id)
+            const slot = await contract.getSkinnyLeavesBaseSlot(id)
 
-            // `leaves` is the first member of SkinnyIMTDataFullNode, so the struct slot is the array header
+            // `leaves` is the first member of SkinnyIMTDataStorage, so the struct slot is the array header
             const length = await ethers.provider.getStorage(address, slot)
             expect(BigInt(length), `tree ${id} leaves.length`).to.equal(BigInt(expected.length))
 
@@ -132,10 +158,16 @@ describe("SkinnyIMTFullNodeReadable (multi-tree)", () => {
                 contract,
                 "NotInitialized"
             )
-            await expect(contract.skinnyLeavesBaseSlot(UNKNOWN)).to.be.revertedWithCustomError(
+            await expect(contract.getSkinnyLeavesBaseSlot(UNKNOWN)).to.be.revertedWithCustomError(
                 contract,
                 "NotInitialized"
             )
+            await expect(contract.getSkinnySideNodes(UNKNOWN, 0, 1)).to.be.revertedWithCustomError(
+                contract,
+                "NotInitialized"
+            )
+            await expect(contract.getSkinnySize(UNKNOWN)).to.be.revertedWithCustomError(contract, "NotInitialized")
+            await expect(contract.getSkinnyDepth(UNKNOWN)).to.be.revertedWithCustomError(contract, "NotInitialized")
         })
 
         it("Should distinguish an initialized-but-empty tree from a nonexistent one", async () => {
@@ -145,7 +177,7 @@ describe("SkinnyIMTFullNodeReadable (multi-tree)", () => {
 
             // initialized and empty: reads fine, returns nothing
             expect(await contract.getSkinnyLeaves(EMPTY, 0, 0)).to.deep.equal([])
-            expect(await contract.skinnyLeavesBaseSlot(EMPTY)).to.not.equal(0n)
+            expect(await contract.getSkinnyLeavesBaseSlot(EMPTY)).to.not.equal(0n)
 
             // nonexistent: rejected outright
             await expect(contract.getSkinnyLeaves(UNKNOWN, 0, 0)).to.be.revertedWithCustomError(

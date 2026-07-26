@@ -6,11 +6,11 @@ import {LibPoseidon2Yul} from "poseidon2-evm/src/bn254/yul/LibPoseidon2Yul.sol";
 import {InternalFatIMTEvent} from "../InternalFatIMTEvent.sol";
 import {FatIMTData} from "../InternalFatIMTCore.sol";
 import {TreeEmpty} from "../InternalFatIMTCore.sol";
-import {InternalFatIMTStorage, FatIMTDataFullNode} from "../InternalFatIMTStorage.sol";
+import {InternalFatIMTStorage, FatIMTDataStorage} from "../InternalFatIMTStorage.sol";
 
 /// @title FatIMTPoseidon2Read
 /// @notice Stateless proof verification (`proofToRoot` / `proofManyToRoot`) split out of
-/// `FatIMTPoseidon2WriteArchiveNode` and `FatIMTPoseidon2WriteFullNode` to keep those libraries under the
+/// `FatIMTPoseidon2WriteEvent` and `FatIMTPoseidon2WriteStorage` to keep those libraries under the
 /// EIP-170 contract size limit. Both functions take the whole proof as parameters and touch no
 /// storage, so a single library serves the plain and full-node trees alike.
 library FatIMTPoseidon2Read {
@@ -48,7 +48,7 @@ library FatIMTPoseidon2Read {
     /// @notice Leaf getter for the full-node tree: reads its dedicated `leaves` array (consecutive
     /// storage slots, fast via debug_storageRangeAt). Pass the whole full-node struct, not `.treeData`.
     function getLeaves(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256 firstIndex,
         uint256 endIndex
     ) public view returns (uint256[] memory) {

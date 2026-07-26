@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.4;
 
-import {SkinnyIMTSha256WriteArchiveNode, SkinnyIMTData} from "../SkinnyIMTSha256WriteArchiveNode.sol";
+import {SkinnyIMTSha256WriteEvent, SkinnyIMTData} from "../SkinnyIMTSha256WriteEvent.sol";
 import {SkinnyIMTSha256Read} from "../SkinnyIMTSha256Read.sol";
 
 // verify/verifyMany are wrapped as state-changing (event-emitting) txs rather than
@@ -15,27 +15,27 @@ contract SkinnyIMTSha256Test {
     SkinnyIMTData internal data;
 
     constructor() {
-        SkinnyIMTSha256WriteArchiveNode.init(data);
+        SkinnyIMTSha256WriteEvent.init(data);
     }
 
     function reset() external {
-        SkinnyIMTSha256WriteArchiveNode.reset(data);
+        SkinnyIMTSha256WriteEvent.reset(data);
     }
 
     function insert(uint256 leaf) external {
-        SkinnyIMTSha256WriteArchiveNode.insert(data, leaf);
+        SkinnyIMTSha256WriteEvent.insert(data, leaf);
     }
 
     function insertMany(uint256[] calldata leaves) external {
-        SkinnyIMTSha256WriteArchiveNode.insertMany(data, leaves);
+        SkinnyIMTSha256WriteEvent.insertMany(data, leaves);
     }
 
     function insertManyRepeated(uint256 value, uint256 amount) external {
-        SkinnyIMTSha256WriteArchiveNode.insertManyRepeated(data, value, amount);
+        SkinnyIMTSha256WriteEvent.insertManyRepeated(data, value, amount);
     }
 
     function precomputeRepeatedCache(uint256 value, uint256 upToLevel) external {
-        SkinnyIMTSha256WriteArchiveNode.precomputeRepeatedCache(data, value, upToLevel);
+        SkinnyIMTSha256WriteEvent.precomputeRepeatedCache(data, value, upToLevel);
     }
 
     function size() external view returns (uint256) {
@@ -47,7 +47,7 @@ contract SkinnyIMTSha256Test {
     }
 
     function update(uint256 oldLeaf, uint256 newLeaf, uint256 index, uint256[] calldata siblingNodes) external {
-        SkinnyIMTSha256WriteArchiveNode.update(data, oldLeaf, newLeaf, index, siblingNodes);
+        SkinnyIMTSha256WriteEvent.update(data, oldLeaf, newLeaf, index, siblingNodes);
     }
 
     function updateMany(
@@ -56,7 +56,7 @@ contract SkinnyIMTSha256Test {
         uint256[] calldata leafIndexes,
         uint256[] calldata proofSiblings
     ) external {
-        SkinnyIMTSha256WriteArchiveNode.updateMany(data, oldLeaves, newLeaves, leafIndexes, proofSiblings);
+        SkinnyIMTSha256WriteEvent.updateMany(data, oldLeaves, newLeaves, leafIndexes, proofSiblings);
     }
 
     function verify(uint256 leaf, uint256 index, uint256[] calldata siblingsNodes) external returns (bool) {

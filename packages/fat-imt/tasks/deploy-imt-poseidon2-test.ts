@@ -1,7 +1,7 @@
 import { task, types } from "hardhat/config"
 import { createPublicClient, createWalletClient, custom } from "viem"
 import { hardhat } from "viem/chains"
-import { FatIMTPoseidon2WriteArchiveNode__factory } from "../typechain-types"
+import { FatIMTPoseidon2WriteEvent__factory } from "../typechain-types"
 
 import { proxy } from "poseidon-solidity"
 import { ethers } from "ethers"
@@ -63,9 +63,9 @@ task("deploy:imt-poseidon2-test", "Deploy an IMT contract for testing a library"
             console.info(`PoseidonT${arity + 1} library has been deployed to: ${poseidonAddress}`)
         }
 
-        const LibraryFactory = (await ethers.getContractFactory(`${libraryName}WriteArchiveNode`, {
+        const LibraryFactory = (await ethers.getContractFactory(`${libraryName}WriteEvent`, {
             libraries: {}
-        })) as FatIMTPoseidon2WriteArchiveNode__factory
+        })) as FatIMTPoseidon2WriteEvent__factory
 
         const library = await LibraryFactory.deploy()
         const libraryAddress = await library.getAddress()
@@ -86,7 +86,7 @@ task("deploy:imt-poseidon2-test", "Deploy an IMT contract for testing a library"
 
         const ContractFactory = await ethers.getContractFactory(`${libraryName}Test`, {
             libraries: {
-                [`${libraryName}WriteArchiveNode`]: libraryAddress,
+                [`${libraryName}WriteEvent`]: libraryAddress,
                 [`${libraryName}Read`]: verifyLibraryAddress
             }
         })

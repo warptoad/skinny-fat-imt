@@ -4,11 +4,11 @@ pragma solidity ^0.8.4;
 import {InternalFatIMTEvent} from "../InternalFatIMTEvent.sol";
 import {FatIMTData} from "../InternalFatIMTCore.sol";
 import {TreeEmpty} from "../InternalFatIMTCore.sol";
-import {InternalFatIMTStorage, FatIMTDataFullNode} from "../InternalFatIMTStorage.sol";
+import {InternalFatIMTStorage, FatIMTDataStorage} from "../InternalFatIMTStorage.sol";
 
 /// @title FatIMTSha256Read
 /// @notice Stateless proof verification (`proofToRoot` / `proofManyToRoot`) split out of
-/// `FatIMTSha256WriteArchiveNode` and `FatIMTSha256WriteFullNode` to keep those libraries under the
+/// `FatIMTSha256WriteEvent` and `FatIMTSha256WriteStorage` to keep those libraries under the
 /// EIP-170 contract size limit. Both functions take the whole proof as parameters and touch no
 /// storage, so a single library serves the plain and full-node trees alike.
 /// Uses the non-field-checked (non-BN254) proof variants: sha256 outputs span the full uint256
@@ -48,7 +48,7 @@ library FatIMTSha256Read {
     /// @notice Leaf getter for the full-node tree: reads its dedicated `leaves` array (consecutive
     /// storage slots, fast via debug_storageRangeAt). Pass the whole full-node struct, not `.treeData`.
     function getLeaves(
-        FatIMTDataFullNode storage self,
+        FatIMTDataStorage storage self,
         uint256 firstIndex,
         uint256 endIndex
     ) public view returns (uint256[] memory) {
