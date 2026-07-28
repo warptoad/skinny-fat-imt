@@ -28,13 +28,11 @@ describe("SkinnyIMTReadableStorage (multi-tree)", () => {
         ).deploy()
 
         // root() moved to the Read library, which MultiTreeTest now calls, so it must be linked too.
-        const read = await (await ethers.getContractFactory("SkinnyIMTPoseidon2Read", { libraries: {} })).deploy()
 
         const contract = await (
             await ethers.getContractFactory("SkinnyIMTPoseidon2MultiTreeTest", {
                 libraries: {
-                    SkinnyIMTPoseidon2WriteStorage: await Storage.getAddress(),
-                    SkinnyIMTPoseidon2Read: await read.getAddress()
+                    SkinnyIMTPoseidon2WriteStorage: await Storage.getAddress()
                 }
             })
         ).deploy()
@@ -102,11 +100,11 @@ describe("SkinnyIMTReadableStorage (multi-tree)", () => {
         const sideNodesA = await contract.getSkinnySideNodes(TREE_A, 0, 3)
         expect(sideNodesA.length).to.equal(3)
         expect(sideNodesA[0]).to.equal(leavesA[2])
-        expect(sideNodesA[2]).to.equal(await contract.root(TREE_A))
+        expect(sideNodesA[2]).to.equal(await contract.getSkinnyRoot(TREE_A))
 
         // tree B is only depth 1, and its two leaves already paired up, so its top side node is the root
         const sideNodesB = await contract.getSkinnySideNodes(TREE_B, 0, 2)
-        expect(sideNodesB[1]).to.equal(await contract.root(TREE_B))
+        expect(sideNodesB[1]).to.equal(await contract.getSkinnyRoot(TREE_B))
     })
 
     it("Should give each tree a distinct, non-zero getSkinnyLeavesBaseSlot", async () => {
@@ -189,7 +187,7 @@ describe("SkinnyIMTReadableStorage (multi-tree)", () => {
 
     it("Should keep trees isolated when one is updated", async () => {
         const { contract, jsA, jsB } = await deploy()
-        const rootBBefore = await contract.root(TREE_B)
+        const rootBBefore = await contract.getSkinnyRoot(TREE_B)
 
         // skinny update consumes a proof: (oldLeaf, newLeaf, leafIndex, siblings)
         const { siblings } = jsA.generateProof(0)
@@ -198,10 +196,10 @@ describe("SkinnyIMTReadableStorage (multi-tree)", () => {
 
         expect(await contract.getSkinnyLeaves(TREE_A, 0, 3)).to.deep.equal([99n, ...leavesA.slice(1)])
         expect(await contract.getSkinnyLeaves(TREE_B, 0, 2)).to.deep.equal(leavesB)
-        expect(await contract.root(TREE_B)).to.equal(rootBBefore)
+        expect(await contract.getSkinnyRoot(TREE_B)).to.equal(rootBBefore)
         // tree A's contract root tracks the JS mirror after the update
-        expect(await contract.root(TREE_A)).to.equal(jsA.root)
+        expect(await contract.getSkinnyRoot(TREE_A)).to.equal(jsA.root)
         // JS B untouched, sanity
-        expect(await contract.root(TREE_B)).to.equal(jsB.root)
+        expect(await contract.getSkinnyRoot(TREE_B)).to.equal(jsB.root)
     })
 })

@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.20;
 
 import {SkinnyIMTPoseidon2WriteStorage} from "../SkinnyIMTPoseidon2WriteStorage.sol";
-import {SkinnyIMTPoseidon2Read} from "../SkinnyIMTPoseidon2Read.sol";
 import {SkinnyIMTReadableStorage} from "../../SkinnyIMTReadableStorage.sol";
 import {SkinnyIMTDataStorage} from "../../InternalSkinnyIMTStorage.sol";
 
@@ -42,10 +41,6 @@ contract SkinnyIMTPoseidon2MultiTreeTest is SkinnyIMTReadableStorage {
         uint256[] calldata proofSiblings
     ) external {
         SkinnyIMTPoseidon2WriteStorage.update(trees[treeId], oldLeaf, newLeaf, leafIndex, proofSiblings);
-    }
-
-    function root(uint256 treeId) external view returns (uint256) {
-        return SkinnyIMTPoseidon2Read.root(trees[treeId].treeData);
     }
 
     function size(uint256 treeId) external view returns (uint256) {

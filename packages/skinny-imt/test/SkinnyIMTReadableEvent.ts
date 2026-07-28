@@ -26,13 +26,11 @@ describe("SkinnyIMTReadableEvent (multi-tree)", () => {
         const Event = await (
             await ethers.getContractFactory("SkinnyIMTPoseidon2WriteEvent", { libraries: {} })
         ).deploy()
-        const read = await (await ethers.getContractFactory("SkinnyIMTPoseidon2Read", { libraries: {} })).deploy()
 
         const contract = await (
             await ethers.getContractFactory("SkinnyIMTPoseidon2EventMultiTreeTest", {
                 libraries: {
-                    SkinnyIMTPoseidon2WriteEvent: await Event.getAddress(),
-                    SkinnyIMTPoseidon2Read: await read.getAddress()
+                    SkinnyIMTPoseidon2WriteEvent: await Event.getAddress()
                 }
             })
         ).deploy()
@@ -67,25 +65,25 @@ describe("SkinnyIMTReadableEvent (multi-tree)", () => {
         const sideNodesA = await contract.getSkinnySideNodes(TREE_A, 0, 3)
         expect(sideNodesA.length).to.equal(3)
         expect(sideNodesA[0]).to.equal(leavesA[2])
-        expect(sideNodesA[2]).to.equal(await contract.root(TREE_A))
+        expect(sideNodesA[2]).to.equal(await contract.getSkinnyRoot(TREE_A))
 
         // tree B's two leaves already paired up, so its top side node is the root
         const sideNodesB = await contract.getSkinnySideNodes(TREE_B, 0, 2)
-        expect(sideNodesB[1]).to.equal(await contract.root(TREE_B))
+        expect(sideNodesB[1]).to.equal(await contract.getSkinnyRoot(TREE_B))
         expect(sideNodesB[1]).to.not.equal(sideNodesA[2])
     })
 
     it("Should keep trees isolated when one is updated", async () => {
         const { contract, jsA } = await deploy()
-        const rootBBefore = await contract.root(TREE_B)
+        const rootBBefore = await contract.getSkinnyRoot(TREE_B)
 
         // skinny update consumes a proof: (oldLeaf, newLeaf, leafIndex, siblings)
         const { siblings } = jsA.generateProof(0)
         await contract.update(TREE_A, leavesA[0], 99n, 0, siblings)
         jsA.update(0, 99n)
 
-        expect(await contract.root(TREE_A)).to.equal(jsA.root)
-        expect(await contract.root(TREE_B)).to.equal(rootBBefore)
+        expect(await contract.getSkinnyRoot(TREE_A)).to.equal(jsA.root)
+        expect(await contract.getSkinnyRoot(TREE_B)).to.equal(rootBBefore)
         expect(await contract.getSkinnySize(TREE_B)).to.equal(leavesB.length)
     })
 

@@ -23,13 +23,11 @@ describe("FatIMTReadableStorage (multi-tree)", () => {
         ).deploy()
 
         // root() moved to the Read library, which MultiTreeTest now calls, so it must be linked too.
-        const read = await (await ethers.getContractFactory("FatIMTPoseidon2Read", { libraries: {} })).deploy()
 
         const contract = await (
             await ethers.getContractFactory("FatIMTPoseidon2MultiTreeTest", {
                 libraries: {
-                    FatIMTPoseidon2WriteStorage: await Storage.getAddress(),
-                    FatIMTPoseidon2Read: await read.getAddress()
+                    FatIMTPoseidon2WriteStorage: await Storage.getAddress()
                 }
             })
         ).deploy()
@@ -101,7 +99,7 @@ describe("FatIMTReadableStorage (multi-tree)", () => {
         for (const id of [TREE_A, TREE_B]) {
             const depth = await contract.getFatDepth(id)
             const top = await contract.getFatNodes(id, 0, 1, depth)
-            expect(top[0]).to.equal(await contract.root(id))
+            expect(top[0]).to.equal(await contract.getFatRoot(id))
         }
     })
 
@@ -179,12 +177,12 @@ describe("FatIMTReadableStorage (multi-tree)", () => {
 
     it("Should keep trees isolated when one is updated", async () => {
         const contract = await deploy()
-        const rootBBefore = await contract.root(TREE_B)
+        const rootBBefore = await contract.getFatRoot(TREE_B)
 
         await contract.update(TREE_A, 99n, 0)
 
         expect(await contract.getFatLeaves(TREE_A, 0, 3)).to.deep.equal([99n, ...leavesA.slice(1)])
         expect(await contract.getFatLeaves(TREE_B, 0, 2)).to.deep.equal(leavesB)
-        expect(await contract.root(TREE_B)).to.equal(rootBBefore)
+        expect(await contract.getFatRoot(TREE_B)).to.equal(rootBBefore)
     })
 })

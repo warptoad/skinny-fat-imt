@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.20;
 
 import {FatIMTPoseidon2WriteStorage} from "../FatIMTPoseidon2WriteStorage.sol";
 import {FatIMTReadableStorage} from "../../FatIMTReadableStorage.sol";
@@ -11,8 +11,10 @@ import {SkinnyIMTDataStorage} from "@zk-kit/skinny-imt.sol/InternalSkinnyIMTStor
 
 /// Holds a fat *and* a skinny tree in one contract, which is the case the two readable bases have to
 /// coexist for. Because every name in both bases is family-prefixed down to the external ABI, the two
-/// share no selector and no internal hook: inheriting both costs exactly the two `_get*Tree` resolvers
-/// below and nothing else. The families keep separate id spaces, so `1` here names two distinct trees.
+/// share no selector and no internal hook — except `supportsInterface`, whose selector ERC-165 fixes
+/// and which therefore cannot be prefixed. So inheriting both costs the two `_get*Tree` resolvers
+/// plus that one disambiguating override, and nothing else. The families keep separate id spaces, so
+/// `1` here names two distinct trees.
 contract FatAndSkinnyIMTPoseidon2Test is FatIMTReadableStorage, SkinnyIMTReadableStorage {
     mapping(uint256 => FatIMTDataStorage) internal fatTrees;
     mapping(uint256 => SkinnyIMTDataStorage) internal skinnyTrees;
@@ -23,6 +25,16 @@ contract FatAndSkinnyIMTPoseidon2Test is FatIMTReadableStorage, SkinnyIMTReadabl
 
     function _getSkinnyStorageTree(uint256 treeId) internal view override returns (SkinnyIMTDataStorage storage) {
         return skinnyTrees[treeId];
+    }
+
+    /// Solidity will not pick between two inherited implementations of one function, so this override
+    /// is required rather than stylistic. `super` is enough to make it correct: both families root at
+    /// the same OpenZeppelin `ERC165`, so C3 linearization threads the walk through all four readable
+    /// bases and every id gets reported.
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view override(FatIMTReadableStorage, SkinnyIMTReadableStorage) returns (bool) {
+        return super.supportsInterface(interfaceId);
     }
 
     function initFat(uint256 treeId) external returns (uint256) {

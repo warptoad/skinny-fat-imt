@@ -1002,6 +1002,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@openzeppelin/contracts@npm:^5.0.2":
+  version: 5.6.1
+  resolution: "@openzeppelin/contracts@npm:5.6.1"
+  checksum: 10/91c7df17f9c9119f0180ee3524f6aafb0b7e80a4568df0c93828ec32411f0175088e1fc8dc02b86c9751e9d9b9ce8bc6832396e940f2095b95ee7a2949b37c88
+  languageName: node
+  linkType: hard
+
 "@pkgjs/parseargs@npm:^0.11.0":
   version: 0.11.0
   resolution: "@pkgjs/parseargs@npm:0.11.0"
@@ -1406,6 +1413,26 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@warptoad/fat-imt.sol@workspace:packages/fat-imt/contracts":
+  version: 0.0.0-use.local
+  resolution: "@warptoad/fat-imt.sol@workspace:packages/fat-imt/contracts"
+  dependencies:
+    "@openzeppelin/contracts": "npm:^5.0.2"
+    poseidon-solidity: "npm:0.0.5"
+    poseidon2-evm: "npm:2.0.0"
+  languageName: unknown
+  linkType: soft
+
+"@warptoad/skinny-imt.sol@workspace:packages/skinny-imt/contracts":
+  version: 0.0.0-use.local
+  resolution: "@warptoad/skinny-imt.sol@workspace:packages/skinny-imt/contracts"
+  dependencies:
+    "@openzeppelin/contracts": "npm:^5.0.2"
+    poseidon-solidity: "npm:0.0.5"
+    poseidon2-evm: "npm:2.0.0"
+  languageName: unknown
+  linkType: soft
+
 "@zk-kit/excubiae@workspace:packages/excubiae/contracts":
   version: 0.0.0-use.local
   resolution: "@zk-kit/excubiae@workspace:packages/excubiae/contracts"
@@ -1413,15 +1440,6 @@ __metadata:
     "@ethereum-attestation-service/eas-contracts": "npm:1.7.1"
     "@openzeppelin/contracts": "npm:5.0.2"
     "@semaphore-protocol/contracts": "npm:4.0.0-beta.16"
-  languageName: unknown
-  linkType: soft
-
-"@zk-kit/fat-imt.sol@workspace:packages/fat-imt/contracts":
-  version: 0.0.0-use.local
-  resolution: "@zk-kit/fat-imt.sol@workspace:packages/fat-imt/contracts"
-  dependencies:
-    poseidon-solidity: "npm:0.0.5"
-    poseidon2-evm: "npm:2.0.0"
   languageName: unknown
   linkType: soft
 
@@ -1483,15 +1501,6 @@ __metadata:
   checksum: 10/33d03a20c3ce6270036d4cc0a96100b4f6e17f373688595937d2a0863883562b648a768c11ab938fd83ed65d7a70b542db647e3d9e0b5e050c02efc5df0543ce
   languageName: node
   linkType: hard
-
-"@zk-kit/skinny-imt.sol@workspace:packages/skinny-imt/contracts":
-  version: 0.0.0-use.local
-  resolution: "@zk-kit/skinny-imt.sol@workspace:packages/skinny-imt/contracts"
-  dependencies:
-    poseidon-solidity: "npm:0.0.5"
-    poseidon2-evm: "npm:2.0.0"
-  languageName: unknown
-  linkType: soft
 
 "@zk-kit/utils@npm:1.0.0":
   version: 1.0.0
@@ -3364,6 +3373,7 @@ __metadata:
     "@nomicfoundation/hardhat-network-helpers": "npm:^1.0.0"
     "@nomicfoundation/hardhat-toolbox": "npm:^4.0.0"
     "@nomicfoundation/hardhat-verify": "npm:^2.0.0"
+    "@openzeppelin/contracts": "npm:^5.0.2"
     "@typechain/ethers-v6": "npm:^0.5.0"
     "@typechain/hardhat": "npm:^9.0.0"
     "@types/chai": "npm:^4.2.0"
@@ -6466,6 +6476,7 @@ __metadata:
     "@nomicfoundation/hardhat-network-helpers": "npm:^1.0.0"
     "@nomicfoundation/hardhat-toolbox": "npm:^4.0.0"
     "@nomicfoundation/hardhat-verify": "npm:^2.0.0"
+    "@openzeppelin/contracts": "npm:^5.0.2"
     "@typechain/ethers-v6": "npm:^0.5.0"
     "@typechain/hardhat": "npm:^9.0.0"
     "@types/chai": "npm:^4.2.0"

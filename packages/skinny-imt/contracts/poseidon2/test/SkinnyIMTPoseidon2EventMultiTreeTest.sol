@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.20;
 
 import {SkinnyIMTPoseidon2WriteEvent} from "../SkinnyIMTPoseidon2WriteEvent.sol";
-import {SkinnyIMTPoseidon2Read} from "../SkinnyIMTPoseidon2Read.sol";
 import {SkinnyIMTReadableEvent} from "../../SkinnyIMTReadableEvent.sol";
 import {SkinnyIMTDataEvent} from "../../InternalSkinnyIMTEvent.sol";
 
@@ -38,9 +37,5 @@ contract SkinnyIMTPoseidon2EventMultiTreeTest is SkinnyIMTReadableEvent {
         uint256[] calldata proofSiblings
     ) external {
         SkinnyIMTPoseidon2WriteEvent.update(trees[treeId], oldLeaf, newLeaf, leafIndex, proofSiblings);
-    }
-
-    function root(uint256 treeId) external view returns (uint256) {
-        return SkinnyIMTPoseidon2Read.root(trees[treeId]);
     }
 }

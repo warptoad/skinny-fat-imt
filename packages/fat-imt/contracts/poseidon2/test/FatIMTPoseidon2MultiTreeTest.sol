@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.20;
 
 import {FatIMTPoseidon2WriteStorage} from "../FatIMTPoseidon2WriteStorage.sol";
-import {FatIMTPoseidon2Read} from "../FatIMTPoseidon2Read.sol";
 import {FatIMTReadableStorage} from "../../FatIMTReadableStorage.sol";
 import {FatIMTDataStorage} from "../../InternalFatIMTStorage.sol";
 
@@ -35,10 +34,6 @@ contract FatIMTPoseidon2MultiTreeTest is FatIMTReadableStorage {
 
     function update(uint256 treeId, uint256 newLeaf, uint256 leafIndex) external {
         FatIMTPoseidon2WriteStorage.update(trees[treeId], newLeaf, leafIndex);
-    }
-
-    function root(uint256 treeId) external view returns (uint256) {
-        return FatIMTPoseidon2Read.root(trees[treeId].treeData);
     }
 
     function size(uint256 treeId) external view returns (uint256) {

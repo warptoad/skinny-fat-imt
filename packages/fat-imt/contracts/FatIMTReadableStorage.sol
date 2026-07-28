@@ -1,53 +1,16 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.20;
 
 import {FatIMTDataStorage, InternalFatIMTStorage} from "./InternalFatIMTStorage.sol";
 import {FatIMTDataEvent, NotInitialized} from "./InternalFatIMTEvent.sol";
 import {FatIMTReadableEvent} from "./FatIMTReadableEvent.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import {IFatIMTReadableEvent} from "./interfaces/IFatIMTReadableEvent.sol";
+import {IFatIMTReadableStorage} from "./interfaces/IFatIMTReadableStorage.sol";
 
 /// @title FatIMTReadableStorage
-/// @dev Inheritable interface so any contract holding a storage-variant fat tree
-/// (`FatIMTDataStorage`, which keeps the leaves in a `leaves` array on top of the `nodes` mapping)
-/// has a common read ABI for client side libs.
-///
-/// `FatIMTReadableEvent` plus the two readers only a `leaves` array can serve: `getFatLeaves` off
-/// that array rather than level 0 of `nodes`, and `getFatLeavesBaseSlot` for clients that read the
-/// consecutive slots straight out of storage. It *inherits* the event base rather than restating its
-/// readers, because both would otherwise declare `getFatSize(uint256)` and a consumer could not
-/// inherit the two side by side — an ABI has room for one of each signature.
-///
-/// The tree is an *input*: the consumer resolves `treeId` by implementing `_getFatStorageTree`, so a
-/// single tree, a fixed array, or a mapping all work and nothing here assumes a tree sits at one
-/// fixed slot. (External functions can't take a `storage` reference as a parameter, so the
-/// id-plus-resolver is how a tree gets "passed in" across the ABI boundary.) A single-tree consumer
-/// just ignores the id: `return data;`.
-///
-/// Hash-function agnostic — reading stored leaves and nodes never hashes — so a single base serves
-/// poseidon / poseidon2 / sha256. The consumer still wires the hash-specific operations itself:
-///
-///   contract MyTrees is FatIMTReadableStorage {
-///       using FatIMTPoseidon2WriteStorage for FatIMTDataStorage;
-///       mapping(uint256 => FatIMTDataStorage) internal trees;
-///
-///       function _getFatStorageTree(uint256 treeId) internal view override returns (FatIMTDataStorage storage) {
-///           return trees[treeId];
-///       }
-///
-///       function insert(uint256 treeId, uint256 leaf) external onlyOwner { trees[treeId].insert(leaf); }
-///       // ...update / insertMany / root / size, all on `trees[treeId]`...
-///   }
-///
-/// Holding *both* a fat and a skinny tree in one contract is why the names are prefixed rather than
-/// plain `getLeaves` / `leavesBaseSlot`. An ABI has room for one `getLeaves(uint256,uint256,uint256)`
-/// selector, so two same-named readers would have to be collapsed into one function that decides at
-/// runtime which family an id names — the id itself cannot say, since the type is erased at the ABI
-/// boundary. Prefixing sidesteps that: the two bases share no selector, so a mixed consumer inherits
-/// both and writes nothing to reconcile them, and each family keeps its own id space.
-///
-///   contract MyTrees is SkinnyIMTReadableStorage, FatIMTReadableStorage {
-///       // implement _getSkinnyStorageTree and _getFatStorageTree; both read ABIs are then inherited
-///   }
-abstract contract FatIMTReadableStorage is FatIMTReadableEvent {
+/// @dev
+abstract contract FatIMTReadableStorage is FatIMTReadableEvent, IFatIMTReadableStorage {
     /// @dev Resolves `treeId` to the consumer's tree storage. Single-tree consumers may ignore `treeId`.
     function _getFatStorageTree(uint256 treeId) internal view virtual returns (FatIMTDataStorage storage);
 
@@ -70,6 +33,17 @@ abstract contract FatIMTReadableStorage is FatIMTReadableEvent {
         return tree;
     }
 
+    /// @dev Only the id this base adds; `super` walks on to `FatIMTReadableEvent` for the event id
+    /// and OpenZeppelin's `ERC165` for `0x01ffc9a7`. Note this id covers *only* `getFatLeavesBaseSlot`
+    /// — `getFatLeaves` is overridden below rather than added, so it stays in the event id, and
+    /// inherited functions are excluded from `type(I).interfaceId` — so a client after the whole read
+    /// ABI checks the event id too.
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view virtual override(FatIMTReadableEvent, IERC165) returns (bool) {
+        return interfaceId == type(IFatIMTReadableStorage).interfaceId || super.supportsInterface(interfaceId);
+    }
+
     /// @notice Returns tree `treeId`'s leaves in the half-open range [firstIndex, endIndex).
     /// @dev Overrides the event variant's reader to serve the same selector off the dedicated
     /// `leaves` array. Meant for off-chain `eth_call` (no gas paid); for large ranges page it, since
@@ -78,7 +52,7 @@ abstract contract FatIMTReadableStorage is FatIMTReadableEvent {
         uint256 treeId,
         uint256 firstIndex,
         uint256 endIndex
-    ) external view virtual override returns (uint256[] memory) {
+    ) external view virtual override(FatIMTReadableEvent, IFatIMTReadableEvent) returns (uint256[] memory) {
         return InternalFatIMTStorage._getLeaves(_initializedFatStorageTree(treeId), firstIndex, endIndex);
     }
 
@@ -87,7 +61,7 @@ abstract contract FatIMTReadableStorage is FatIMTReadableEvent {
     /// @dev `leaves` is the first member of `FatIMTDataStorage`, so the struct's slot is the array
     /// header slot; elements start at `keccak256(slot)`. Derived from whatever `_getFatStorageTree`
     /// returns, so it stays correct for a mapping (`keccak256(key, mappingSlot)`) or array layout too.
-    function getFatLeavesBaseSlot(uint256 treeId) external view returns (uint256) {
+    function getFatLeavesBaseSlot(uint256 treeId) external view virtual override returns (uint256) {
         FatIMTDataStorage storage tree = _initializedFatStorageTree(treeId);
         uint256 slot;
         assembly {
