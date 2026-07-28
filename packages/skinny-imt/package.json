@@ -37,6 +37,7 @@
         "typescript": "^5.3.3"
     },
     "dependencies": {
+        "@openzeppelin/contracts": "^5.0.2",
         "@zkpassport/poseidon2": "^0.6.2",
         "poseidon-solidity": "0.0.5",
         "poseidon2-evm": "2.0.0"

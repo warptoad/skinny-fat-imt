@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.20;
 
 import {SkinnyIMTPoseidon2WriteEvent} from "../SkinnyIMTPoseidon2WriteEvent.sol";
 import {SkinnyIMTPoseidon2WriteStorage} from "../SkinnyIMTPoseidon2WriteStorage.sol";

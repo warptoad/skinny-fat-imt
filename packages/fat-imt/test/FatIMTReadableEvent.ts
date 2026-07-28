@@ -19,13 +19,11 @@ describe("FatIMTReadableEvent (multi-tree)", () => {
         await deployPoseidon2(ethers.provider, sender)
 
         const Event = await (await ethers.getContractFactory("FatIMTPoseidon2WriteEvent", { libraries: {} })).deploy()
-        const read = await (await ethers.getContractFactory("FatIMTPoseidon2Read", { libraries: {} })).deploy()
 
         const contract = await (
             await ethers.getContractFactory("FatIMTPoseidon2EventMultiTreeTest", {
                 libraries: {
-                    FatIMTPoseidon2WriteEvent: await Event.getAddress(),
-                    FatIMTPoseidon2Read: await read.getAddress()
+                    FatIMTPoseidon2WriteEvent: await Event.getAddress()
                 }
             })
         ).deploy()
@@ -61,7 +59,7 @@ describe("FatIMTReadableEvent (multi-tree)", () => {
         expect(level1[0]).to.not.equal(0n)
 
         // tree B is one level deep, and that level is its root
-        expect((await contract.getFatNodes(TREE_B, 0, 1, 1))[0]).to.equal(await contract.root(TREE_B))
+        expect((await contract.getFatNodes(TREE_B, 0, 1, 1))[0]).to.equal(await contract.getFatRoot(TREE_B))
     })
 
     it("Should report each tree's own size and depth", async () => {
@@ -79,19 +77,19 @@ describe("FatIMTReadableEvent (multi-tree)", () => {
 
         for (const id of [TREE_A, TREE_B]) {
             const depth = await contract.getFatDepth(id)
-            expect((await contract.getFatNodes(id, 0, 1, depth))[0]).to.equal(await contract.root(id))
+            expect((await contract.getFatNodes(id, 0, 1, depth))[0]).to.equal(await contract.getFatRoot(id))
         }
     })
 
     it("Should keep trees isolated when one is updated", async () => {
         const contract = await deploy()
-        const rootBBefore = await contract.root(TREE_B)
+        const rootBBefore = await contract.getFatRoot(TREE_B)
 
         await contract.update(TREE_A, 99n, 0)
 
         expect(await contract.getFatLeaves(TREE_A, 0, 3)).to.deep.equal([99n, ...leavesA.slice(1)])
         expect(await contract.getFatLeaves(TREE_B, 0, 2)).to.deep.equal(leavesB)
-        expect(await contract.root(TREE_B)).to.equal(rootBBefore)
+        expect(await contract.getFatRoot(TREE_B)).to.equal(rootBBefore)
     })
 
     // Size and depth are what bound a read, so a reset has to shrink them back or a client would go

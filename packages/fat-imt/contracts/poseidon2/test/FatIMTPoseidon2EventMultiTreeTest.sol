@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.20;
 
 import {FatIMTPoseidon2WriteEvent} from "../FatIMTPoseidon2WriteEvent.sol";
-import {FatIMTPoseidon2Read} from "../FatIMTPoseidon2Read.sol";
 import {FatIMTReadableEvent} from "../../FatIMTReadableEvent.sol";
 import {FatIMTDataEvent} from "../../InternalFatIMTEvent.sol";
 
@@ -31,9 +30,5 @@ contract FatIMTPoseidon2EventMultiTreeTest is FatIMTReadableEvent {
 
     function update(uint256 treeId, uint256 newLeaf, uint256 leafIndex) external {
         FatIMTPoseidon2WriteEvent.update(trees[treeId], newLeaf, leafIndex);
-    }
-
-    function root(uint256 treeId) external view returns (uint256) {
-        return FatIMTPoseidon2Read.root(trees[treeId]);
     }
 }
