@@ -2,7 +2,7 @@
 pragma solidity ^0.8.4;
 
 import {InternalFatIMTCore, FatIMTData as FatIMTDataEvent, MultiProof, TreeEmpty} from "./InternalFatIMTCore.sol";
-import {NewTree, TreeReset, NewRoot, NewLeaf, RepeatedLeafs, UpdatedLeaf} from "./interfaces/events.sol";
+import {IIMTEvents} from "./interfaces/IIMTEvents.sol";
 import {_emitUpdatedMany, _requireInField, _requireAllInField} from "./FatIMTUtils.sol";
 
 error EndIndexOutOfRange();
@@ -12,7 +12,7 @@ error AlreadyInitialized();
 
 library InternalFatIMTEvent {
     function _reset(FatIMTDataEvent storage self) internal {
-        emit TreeReset(self.treeId);
+        emit IIMTEvents.TreeReset(self.treeId);
         InternalFatIMTCore._reset(self);
     }
 
@@ -33,7 +33,7 @@ library InternalFatIMTEvent {
         }
         uint256 id = slot + 1;
         self.treeId = id;
-        emit NewTree(id);
+        emit IIMTEvents.NewTree(id);
         return id;
     }
 
@@ -89,13 +89,13 @@ library InternalFatIMTEvent {
     ) internal returns (uint256, uint256) {
         // update tree
         (uint256 newRoot, uint256 index) = InternalFatIMTCore._insert(self, leaf, hasher);
-        // emit event
+        // emit IIMTEvents.event
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
         }
-        emit NewLeaf(treeId, index, leaf);
-        emit NewRoot(treeId, newRoot, self.size);
+        emit IIMTEvents.NewLeaf(treeId, index, leaf);
+        emit IIMTEvents.NewRoot(treeId, newRoot, self.size);
         return (newRoot, index);
     }
 
@@ -108,13 +108,13 @@ library InternalFatIMTEvent {
         _requireInField(leaf);
         // update tree
         (uint256 newRoot, uint256 index) = InternalFatIMTCore._insert(self, leaf, hasher);
-        // emit event
+        // emit IIMTEvents.event
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
         }
-        emit NewLeaf(treeId, index, leaf);
-        emit NewRoot(treeId, newRoot, self.size);
+        emit IIMTEvents.NewLeaf(treeId, index, leaf);
+        emit IIMTEvents.NewRoot(treeId, newRoot, self.size);
         return (newRoot, index);
     }
 
@@ -126,18 +126,18 @@ library InternalFatIMTEvent {
         // update tree (Core now owns start/next, like _insertManyRepeated)
         (uint256 newRoot, uint256 startIndex, uint256 nextIndex) = InternalFatIMTCore._insertMany(self, leaves, hasher);
 
-        // emit events
+        // emit IIMTEvents.events
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
         }
         for (uint256 i = 0; i < leaves.length; ) {
-            emit NewLeaf(treeId, startIndex + i, leaves[i]);
+            emit IIMTEvents.NewLeaf(treeId, startIndex + i, leaves[i]);
             unchecked {
                 ++i;
             }
         }
-        emit NewRoot(treeId, newRoot, nextIndex);
+        emit IIMTEvents.NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -152,18 +152,18 @@ library InternalFatIMTEvent {
         // update tree (Core now owns start/next, like _insertManyRepeated)
         (uint256 newRoot, uint256 startIndex, uint256 nextIndex) = InternalFatIMTCore._insertMany(self, leaves, hasher);
 
-        // emit events
+        // emit IIMTEvents.events
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
         }
         for (uint256 i = 0; i < leaves.length; ) {
-            emit NewLeaf(treeId, startIndex + i, leaves[i]);
+            emit IIMTEvents.NewLeaf(treeId, startIndex + i, leaves[i]);
             unchecked {
                 ++i;
             }
         }
-        emit NewRoot(treeId, newRoot, nextIndex);
+        emit IIMTEvents.NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -180,20 +180,20 @@ library InternalFatIMTEvent {
             amount,
             hasher
         );
-        // emit events. fat-imt stores every node anyway, so a NewLeaf per leaf costs it nothing extra.
+        // emit IIMTEvents.events. fat-imt stores every node anyway, so a NewLeaf per leaf costs it nothing extra.
         // (skinny keeps only RepeatedLeafs here, since there per-leaf events would wreck its scaling.)
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
         }
         for (uint256 i = 0; i < amount; ) {
-            emit NewLeaf(treeId, startIndex + i, value);
+            emit IIMTEvents.NewLeaf(treeId, startIndex + i, value);
             unchecked {
                 ++i;
             }
         }
-        emit RepeatedLeafs(treeId, startIndex, nextIndex, value);
-        emit NewRoot(treeId, newRoot, nextIndex);
+        emit IIMTEvents.RepeatedLeafs(treeId, startIndex, nextIndex, value);
+        emit IIMTEvents.NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -212,20 +212,20 @@ library InternalFatIMTEvent {
             amount,
             hasher
         );
-        // emit events. fat-imt stores every node anyway, so a NewLeaf per leaf costs it nothing extra.
+        // emit IIMTEvents.events. fat-imt stores every node anyway, so a NewLeaf per leaf costs it nothing extra.
         // (skinny keeps only RepeatedLeafs here, since there per-leaf events would wreck its scaling.)
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
         }
         for (uint256 i = 0; i < amount; ) {
-            emit NewLeaf(treeId, startIndex + i, value);
+            emit IIMTEvents.NewLeaf(treeId, startIndex + i, value);
             unchecked {
                 ++i;
             }
         }
-        emit RepeatedLeafs(treeId, startIndex, nextIndex, value);
-        emit NewRoot(treeId, newRoot, nextIndex);
+        emit IIMTEvents.RepeatedLeafs(treeId, startIndex, nextIndex, value);
+        emit IIMTEvents.NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -267,13 +267,13 @@ library InternalFatIMTEvent {
     ) internal returns (uint256, uint256) {
         // update tree
         (uint256 newRoot, uint256 oldLeaf) = InternalFatIMTCore._update(self, newLeaf, leafIndex, hasher);
-        // emit event
+        // emit IIMTEvents.event
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
         }
-        emit UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
-        emit NewRoot(treeId, newRoot, self.size);
+        emit IIMTEvents.UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
+        emit IIMTEvents.NewRoot(treeId, newRoot, self.size);
         return (newRoot, oldLeaf);
     }
 
@@ -287,13 +287,13 @@ library InternalFatIMTEvent {
         _requireInField(newLeaf);
         // update tree
         (uint256 newRoot, uint256 oldLeaf) = InternalFatIMTCore._update(self, newLeaf, leafIndex, hasher);
-        // emit event
+        // emit IIMTEvents.event
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
         }
-        emit UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
-        emit NewRoot(treeId, newRoot, self.size);
+        emit IIMTEvents.UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
+        emit IIMTEvents.NewRoot(treeId, newRoot, self.size);
         return (newRoot, oldLeaf);
     }
 
@@ -315,10 +315,10 @@ library InternalFatIMTEvent {
             leafIndexes,
             hasher
         );
-        // emit event
+        // emit IIMTEvents.event
         // no tree.id == 0 check here, self.size == 0 already does that, also stack limit is too tight
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
-        emit NewRoot(self.treeId, newRoot, self.size);
+        emit IIMTEvents.NewRoot(self.treeId, newRoot, self.size);
         return (newRoot, oldLeaves);
     }
 
@@ -341,10 +341,10 @@ library InternalFatIMTEvent {
             leafIndexes,
             hasher
         );
-        // emit event
+        // emit IIMTEvents.event
         // no tree.id == 0 check here, self.size == 0 already does that, also stack limit is too tight
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
-        emit NewRoot(self.treeId, newRoot, self.size);
+        emit IIMTEvents.NewRoot(self.treeId, newRoot, self.size);
         return (newRoot, oldLeaves);
     }
 
