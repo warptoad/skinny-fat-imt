@@ -2,7 +2,7 @@
 pragma solidity ^0.8.4;
 
 import {InternalSkinnyIMTEvent, SkinnyIMTDataEvent} from "./InternalSkinnyIMTEvent.sol";
-import {NewLeaf} from "./interfaces/events.sol";
+import {IIMTEvents} from "./interfaces/IIMTEvents.sol";
 import {_emitUpdatedMany, _requireInField, _requireAllInField} from "./SkinnyIMTUtils.sol";
 
 // added storage of the leaves to allow syncing with full nodes for leaves older then 1 year
@@ -106,7 +106,7 @@ library InternalSkinnyIMTStorage {
         uint256 treeSize = self.treeData.size;
         for (uint256 i = 0; i < amount; i++) {
             self.leaves.push(value);
-            emit NewLeaf(self.treeData.treeId, treeSize + i, value);
+            emit IIMTEvents.NewLeaf(self.treeData.treeId, treeSize + i, value);
         }
         return InternalSkinnyIMTEvent._insertManyRepeated(self.treeData, value, amount, hasher);
     }
@@ -120,7 +120,7 @@ library InternalSkinnyIMTStorage {
         uint256 treeSize = self.treeData.size;
         for (uint256 i = 0; i < amount; i++) {
             self.leaves.push(value);
-            emit NewLeaf(self.treeData.treeId, treeSize + i, value);
+            emit IIMTEvents.NewLeaf(self.treeData.treeId, treeSize + i, value);
         }
         return InternalSkinnyIMTEvent._insertManyRepeatedBN254(self.treeData, value, amount, hasher);
     }

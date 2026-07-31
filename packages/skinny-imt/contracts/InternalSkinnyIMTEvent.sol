@@ -3,7 +3,7 @@ pragma solidity ^0.8.4;
 
 import {InternalSkinnyIMTCore, MultiProof, TreeEmpty} from "./InternalSkinnyIMTCore.sol";
 import {SkinnyIMTData as SkinnyIMTDataEvent} from "./InternalSkinnyIMTCore.sol";
-import {NewTree, TreeReset, NewRoot, NewLeaf, RepeatedLeafs, UpdatedLeaf} from "./interfaces/events.sol";
+import {IIMTEvents} from "./interfaces/IIMTEvents.sol";
 import {_emitUpdatedMany, _requireInField, _requireAllInField} from "./SkinnyIMTUtils.sol";
 
 error NotInitialized();
@@ -11,7 +11,7 @@ error AlreadyInitialized();
 
 library InternalSkinnyIMTEvent {
     function _reset(SkinnyIMTDataEvent storage self) internal {
-        emit TreeReset(self.treeId);
+        emit IIMTEvents.TreeReset(self.treeId);
         InternalSkinnyIMTCore._reset(self);
     }
 
@@ -36,7 +36,7 @@ library InternalSkinnyIMTEvent {
         }
         uint256 id = slot + 1;
         self.treeId = id;
-        emit NewTree(id);
+        emit IIMTEvents.NewTree(id);
         return id;
     }
 
@@ -71,13 +71,13 @@ library InternalSkinnyIMTEvent {
     ) internal returns (uint256, uint256) {
         // update tree
         (uint256 newRoot, uint256 index) = InternalSkinnyIMTCore._insert(self, leaf, hasher);
-        // emit event
+        // emit IIMTEvents.event
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
         }
-        emit NewLeaf(treeId, index, leaf);
-        emit NewRoot(treeId, newRoot, self.size);
+        emit IIMTEvents.NewLeaf(treeId, index, leaf);
+        emit IIMTEvents.NewRoot(treeId, newRoot, self.size);
         return (newRoot, index);
     }
 
@@ -90,13 +90,13 @@ library InternalSkinnyIMTEvent {
         _requireInField(leaf);
         // update tree
         (uint256 newRoot, uint256 index) = InternalSkinnyIMTCore._insert(self, leaf, hasher);
-        // emit event
+        // emit IIMTEvents.event
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
         }
-        emit NewLeaf(treeId, index, leaf);
-        emit NewRoot(treeId, newRoot, self.size);
+        emit IIMTEvents.NewLeaf(treeId, index, leaf);
+        emit IIMTEvents.NewRoot(treeId, newRoot, self.size);
         return (newRoot, index);
     }
 
@@ -112,19 +112,19 @@ library InternalSkinnyIMTEvent {
             hasher
         );
 
-        // emit events
+        // emit IIMTEvents.events
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
         }
         for (uint256 i = 0; i < leaves.length; ) {
             uint256 leaf = leaves[i];
-            emit NewLeaf(treeId, startIndex + i, leaf);
+            emit IIMTEvents.NewLeaf(treeId, startIndex + i, leaf);
             unchecked {
                 ++i;
             }
         }
-        emit NewRoot(treeId, newRoot, nextIndex);
+        emit IIMTEvents.NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -140,7 +140,7 @@ library InternalSkinnyIMTEvent {
             hasher
         );
 
-        // emit events
+        // emit IIMTEvents.events
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
@@ -148,12 +148,12 @@ library InternalSkinnyIMTEvent {
         for (uint256 i = 0; i < leaves.length; ) {
             uint256 leaf = leaves[i];
             _requireInField(leaf);
-            emit NewLeaf(treeId, startIndex + i, leaf);
+            emit IIMTEvents.NewLeaf(treeId, startIndex + i, leaf);
             unchecked {
                 ++i;
             }
         }
-        emit NewRoot(treeId, newRoot, nextIndex);
+        emit IIMTEvents.NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -170,13 +170,13 @@ library InternalSkinnyIMTEvent {
             amount,
             hasher
         );
-        // emit event
+        // emit IIMTEvents.event
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
         }
-        emit RepeatedLeafs(treeId, startIndex, nextIndex, value);
-        emit NewRoot(treeId, newRoot, nextIndex);
+        emit IIMTEvents.RepeatedLeafs(treeId, startIndex, nextIndex, value);
+        emit IIMTEvents.NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -195,13 +195,13 @@ library InternalSkinnyIMTEvent {
             amount,
             hasher
         );
-        // emit event
+        // emit IIMTEvents.event
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
         }
-        emit RepeatedLeafs(treeId, startIndex, nextIndex, value);
-        emit NewRoot(treeId, newRoot, nextIndex);
+        emit IIMTEvents.RepeatedLeafs(treeId, startIndex, nextIndex, value);
+        emit IIMTEvents.NewRoot(treeId, newRoot, nextIndex);
         return (newRoot, startIndex, nextIndex);
     }
 
@@ -245,13 +245,13 @@ library InternalSkinnyIMTEvent {
     ) internal returns (uint256) {
         // update tree
         uint256 newRoot = InternalSkinnyIMTCore._update(self, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
-        // emit event
+        // emit IIMTEvents.event
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
         }
-        emit UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
-        emit NewRoot(treeId, newRoot, self.size);
+        emit IIMTEvents.UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
+        emit IIMTEvents.NewRoot(treeId, newRoot, self.size);
         return newRoot;
     }
 
@@ -268,13 +268,13 @@ library InternalSkinnyIMTEvent {
         _requireAllInField(proofSiblings);
         // update tree
         uint256 newRoot = InternalSkinnyIMTCore._update(self, oldLeaf, newLeaf, leafIndex, proofSiblings, hasher);
-        // emit event
+        // emit IIMTEvents.event
         uint256 treeId = self.treeId;
         if (treeId == 0) {
             revert NotInitialized();
         }
-        emit UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
-        emit NewRoot(treeId, newRoot, self.size);
+        emit IIMTEvents.UpdatedLeaf(treeId, leafIndex, newLeaf, oldLeaf);
+        emit IIMTEvents.NewRoot(treeId, newRoot, self.size);
         return newRoot;
     }
 
@@ -293,13 +293,13 @@ library InternalSkinnyIMTEvent {
 
         // update tree
         // depth/edgeIndex come from the live tree, never the caller. Built into a local (and the
-        // emit loop split into a helper) to keep this frame under the stack-too-deep limit without viaIR.
+        // emit IIMTEvents.loop split into a helper) to keep this frame under the stack-too-deep limit without viaIR.
         MultiProof memory proof = MultiProof(self.depth, self.size - 1, leafIndexes, proofSiblings);
         uint256 newRoot = InternalSkinnyIMTCore._updateMany(self, oldLeaves, newLeaves, proof, hasher);
-        // emit event
+        // emit IIMTEvents.event
         // no tree.id == 0 check here, self.size == 0 already does that, also stack limit is too tight
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
-        emit NewRoot(self.treeId, newRoot, self.size);
+        emit IIMTEvents.NewRoot(self.treeId, newRoot, self.size);
         return newRoot;
     }
 
@@ -320,13 +320,13 @@ library InternalSkinnyIMTEvent {
 
         // update tree
         // depth/edgeIndex come from the live tree, never the caller. Built into a local (and the
-        // emit loop split into a helper) to keep this frame under the stack-too-deep limit without viaIR.
+        // emit IIMTEvents.loop split into a helper) to keep this frame under the stack-too-deep limit without viaIR.
         MultiProof memory proof = MultiProof(self.depth, self.size - 1, leafIndexes, proofSiblings);
         uint256 newRoot = InternalSkinnyIMTCore._updateMany(self, oldLeaves, newLeaves, proof, hasher);
-        // emit event
+        // emit IIMTEvents.event
         // no tree.id == 0 check here, self.size == 0 already does that, also stack limit is too tight
         _emitUpdatedMany(self.treeId, leafIndexes, oldLeaves, newLeaves);
-        emit NewRoot(self.treeId, newRoot, self.size);
+        emit IIMTEvents.NewRoot(self.treeId, newRoot, self.size);
         return newRoot;
     }
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import {UpdatedLeaf} from "./interfaces/events.sol";
+import {IIMTEvents} from "./interfaces/IIMTEvents.sol";
 import {SNARK_SCALAR_FIELD} from "./Constants.sol";
 import {FatIMTData} from "./InternalFatIMTCore.sol";
 
@@ -29,7 +29,7 @@ function _emitUpdatedMany(
     uint256[] calldata newLeaves
 ) {
     for (uint256 i = 0; i < leafIndexes.length; i++) {
-        emit UpdatedLeaf(treeId, leafIndexes[i], newLeaves[i], oldLeaves[i]);
+        emit IIMTEvents.UpdatedLeaf(treeId, leafIndexes[i], newLeaves[i], oldLeaves[i]);
     }
 }
 
