@@ -12,7 +12,8 @@ error AlreadyInitialized();
 
 library InternalFatIMTEvent {
     function _reset(FatIMTDataEvent storage self) internal {
-        emit IIMTEvents.TreeReset(self.treeId);
+        uint256 id = self.treeId;
+        emit IIMTEvents.NewRoot(id, 0, 0);
         InternalFatIMTCore._reset(self);
     }
 
@@ -34,6 +35,7 @@ library InternalFatIMTEvent {
         uint256 id = slot + 1;
         self.treeId = id;
         emit IIMTEvents.NewTree(id);
+        emit IIMTEvents.NewRoot(id, 0, 0);
         return id;
     }
 

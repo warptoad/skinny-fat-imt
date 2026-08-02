@@ -11,7 +11,8 @@ error AlreadyInitialized();
 
 library InternalSkinnyIMTEvent {
     function _reset(SkinnyIMTDataEvent storage self) internal {
-        emit IIMTEvents.TreeReset(self.treeId);
+        uint256 id = self.treeId;
+        emit IIMTEvents.NewRoot(id, 0, 0);
         InternalSkinnyIMTCore._reset(self);
     }
 
@@ -37,6 +38,7 @@ library InternalSkinnyIMTEvent {
         uint256 id = slot + 1;
         self.treeId = id;
         emit IIMTEvents.NewTree(id);
+        emit IIMTEvents.NewRoot(id, 0, 0);
         return id;
     }
 
