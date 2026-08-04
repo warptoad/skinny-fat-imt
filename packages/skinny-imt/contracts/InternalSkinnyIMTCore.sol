@@ -43,6 +43,7 @@ library InternalSkinnyIMTCore {
     function _reset(SkinnyIMTData storage self) internal {
         self.size = 0;
         self.depth = 0;
+        self.sideNodes[0] = 0; // so _root does not reference a invalid/stale root
     }
 
     /// @dev Inserts a new leaf into the incremental merkle tree.

@@ -41,6 +41,7 @@ library InternalFatIMTCore {
     function _reset(FatIMTData storage self) internal {
         self.size = 0;
         self.depth = 0;
+        self.nodes[0][0] = 0; // so _root does not reference an old leaf when it's still empty
     }
 
     /// @dev self.nodes getter (to stay under stack limit)
